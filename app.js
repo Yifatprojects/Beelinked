@@ -40,6 +40,406 @@
   /** yard.id → L.Marker */
   const yardMarkers = new Map();
 
+  /* ── Current-location layer ───────────────────────────────────────── */
+  let _locMarker   = null;
+  let _locCircle   = null;
+  let _locWatchId  = null;
+
+  const locIcon = L.divIcon({
+    className: '',
+    iconSize:  [22, 22],
+    iconAnchor:[11, 11],
+    html: `<div style="
+      width:22px;height:22px;border-radius:50%;
+      background:#3b82f6;border:3px solid #fff;
+      box-shadow:0 0 0 3px rgba(59,130,246,0.35),0 2px 8px rgba(0,0,0,0.4);
+    "></div>`,
+  });
+
+  function updateMyLocation(pos) {
+    const { latitude: lat, longitude: lng, accuracy } = pos.coords;
+    if (_locMarker) {
+      _locMarker.setLatLng([lat, lng]);
+      _locCircle.setLatLng([lat, lng]).setRadius(accuracy);
+    } else {
+      _locCircle = L.circle([lat, lng], {
+        radius: accuracy, color: '#3b82f6', fillColor: '#3b82f6',
+        fillOpacity: 0.10, weight: 1, opacity: 0.4,
+      }).addTo(map);
+      _locMarker = L.marker([lat, lng], { icon: locIcon, zIndexOffset: 1000 })
+        .addTo(map)
+        .bindTooltip('You are here', {
+          permanent: false, direction: 'top', offset: [0, -14],
+          className: 'bl-tooltip',
+        });
+    }
+  }
+
+  let _locateBtn = null; // reference to the locate control button
+
+  function onLocateError(err) {
+    const denied = err && (err.code === 1 || err.code === err.PERMISSION_DENIED);
+    if (_locateBtn) {
+      _locateBtn.title = denied
+        ? 'Location blocked — click to see how to enable it'
+        : 'Unable to get location';
+      _locateBtn.style.color  = '#f59e0b';
+      _locateBtn.style.border = '2px solid #92400e';
+      _locateBtn.innerHTML = `<svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M18.364 5.636a9 9 0 11-12.728 0M12 3v9"/>
+      </svg>`;
+    }
+    if (denied) {
+      console.warn('[BeeLinked] Location permission denied. To enable: click the 🔒 / tune icon next to the URL → Site settings → Location → Allow.');
+    }
+  }
+
+  function startLocationTracking() {
+    if (!navigator.geolocation) return;
+    navigator.geolocation.getCurrentPosition(updateMyLocation, onLocateError, { enableHighAccuracy: true });
+    _locWatchId = navigator.geolocation.watchPosition(updateMyLocation, onLocateError, {
+      enableHighAccuracy: true, maximumAge: 10000, timeout: 20000,
+    });
+  }
+
+  // Locate-me control button (top-left, below zoom)
+  const LocateControl = L.Control.extend({
+    options: { position: 'topleft' },
+    onAdd() {
+      const btn = L.DomUtil.create('button', '');
+      btn.title = 'Show my location';
+      btn.style.cssText = `
+        display:flex;align-items:center;justify-content:center;
+        width:36px;height:36px;border-radius:8px;cursor:pointer;
+        background:#1e293b;border:2px solid #334155;color:#3b82f6;
+        box-shadow:0 2px 8px rgba(0,0,0,0.5);transition:background 0.2s;
+        margin-top:4px;
+      `;
+      btn.innerHTML = `<svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
+        <circle cx="12" cy="12" r="3"/><path stroke-linecap="round" stroke-linejoin="round"
+        d="M12 2v3m0 14v3M2 12h3m14 0h3"/><circle cx="12" cy="12" r="8" stroke-opacity=".35"/>
+      </svg>`;
+      btn.onmouseover = () => { btn.style.background = '#1e3a5f'; };
+      btn.onmouseout  = () => { btn.style.background = '#1e293b'; };
+      _locateBtn = btn;
+
+      L.DomEvent.on(btn, 'click', L.DomEvent.stopPropagation);
+      L.DomEvent.on(btn, 'click', () => {
+        if (!navigator.geolocation) {
+          alert('Geolocation is not supported by your browser.');
+          return;
+        }
+        // Check if permission is already denied
+        if (navigator.permissions) {
+          navigator.permissions.query({ name: 'geolocation' }).then(result => {
+            if (result.state === 'denied') {
+              alert(
+                'Location access is blocked.\n\n' +
+                'To enable it in Chrome:\n' +
+                '1. Click the 🔒 lock icon (or tune icon) next to the URL bar\n' +
+                '2. Go to "Site settings"\n' +
+                '3. Set "Location" to "Allow"\n' +
+                '4. Reload the page'
+              );
+              return;
+            }
+            navigator.geolocation.getCurrentPosition(pos => {
+              updateMyLocation(pos);
+              map.setView([pos.coords.latitude, pos.coords.longitude], 15);
+              // Reset button to normal on success
+              btn.style.color  = '#3b82f6';
+              btn.style.border = '2px solid #334155';
+              btn.title = 'Show my location';
+              btn.innerHTML = `<svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path stroke-linecap="round" stroke-linejoin="round" d="M12 2v3m0 14v3M2 12h3m14 0h3"/><circle cx="12" cy="12" r="8" stroke-opacity=".35"/></svg>`;
+            }, onLocateError, { enableHighAccuracy: true });
+          });
+        } else {
+          navigator.geolocation.getCurrentPosition(pos => {
+            updateMyLocation(pos);
+            map.setView([pos.coords.latitude, pos.coords.longitude], 15);
+          }, onLocateError, { enableHighAccuracy: true });
+        }
+      });
+      return btn;
+    },
+  });
+  new LocateControl().addTo(map);
+
+  // Start passive tracking immediately
+  startLocationTracking();
+
+  /* ── Weather widget (Open-Meteo, no API key required) ────────────── */
+  const WMO_CODES = {
+    0:'Clear sky',1:'Mainly clear',2:'Partly cloudy',3:'Overcast',
+    45:'Foggy',48:'Icy fog',51:'Light drizzle',53:'Drizzle',55:'Heavy drizzle',
+    61:'Light rain',63:'Rain',65:'Heavy rain',
+    71:'Light snow',73:'Snow',75:'Heavy snow',77:'Snow grains',
+    80:'Light showers',81:'Showers',82:'Heavy showers',
+    85:'Snow showers',86:'Heavy snow showers',
+    95:'Thunderstorm',96:'Thunderstorm + hail',99:'Thunderstorm + heavy hail',
+  };
+  const WMO_ICONS = {
+    0:'☀️',1:'🌤️',2:'⛅',3:'☁️',
+    45:'🌫️',48:'🌫️',
+    51:'🌦️',53:'🌦️',55:'🌧️',
+    61:'🌧️',63:'🌧️',65:'🌧️',
+    71:'🌨️',73:'❄️',75:'❄️',77:'🌨️',
+    80:'🌦️',81:'🌧️',82:'⛈️',
+    85:'🌨️',86:'❄️',
+    95:'⛈️',96:'⛈️',99:'⛈️',
+  };
+
+  async function reverseGeocode(lat, lng) {
+    try {
+      const res  = await fetch(
+        `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json&zoom=10`,
+        { headers: { 'Accept-Language': 'en' } }
+      );
+      const data = await res.json();
+      const addr = data.address ?? {};
+      // Pick the most specific available label
+      return addr.village ?? addr.town ?? addr.city ?? addr.county ?? addr.state ?? '';
+    } catch {
+      return '';
+    }
+  }
+
+  async function fetchWeather(lat, lng) {
+    try {
+      const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lng}` +
+        `&current=temperature_2m,relative_humidity_2m,weathercode,windspeed_10m` +
+        `&wind_speed_unit=kmh&timezone=auto`;
+
+      const [weatherRes, cityName] = await Promise.all([
+        fetch(url).then(r => r.json()),
+        reverseGeocode(lat, lng),
+      ]);
+
+      const cur  = weatherRes.current;
+      const code = cur.weathercode ?? 0;
+
+      const temp = Math.round(cur.temperature_2m);
+      const icon = WMO_ICONS[code] ?? '🌡️';
+
+      // Pill (compact)
+      document.getElementById('weatherIconSmall').textContent = icon;
+      document.getElementById('weatherTempSmall').textContent = `${temp}°`;
+
+      // Expanded card
+      document.getElementById('weatherTemp').textContent   = temp;
+      document.getElementById('weatherDesc').textContent   = WMO_CODES[code] ?? 'Unknown';
+      document.getElementById('weatherIcon').textContent   = icon;
+      document.getElementById('weatherWind').innerHTML     =
+        `<svg class="w-3 h-3 shrink-0" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M17.657 3.757A4 4 0 0121 7.5c0 2.21-1.79 4-4 4H3"/><path stroke-linecap="round" stroke-linejoin="round" d="M14.657 18.757A4 4 0 0118 22.5c2.21 0 4-1.79 4-4s-1.79-4-4-4H3"/></svg>
+        ${Math.round(cur.windspeed_10m)} km/h`;
+      document.getElementById('weatherHumidity').innerHTML =
+        `<svg class="w-3 h-3 shrink-0" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 2C6.477 2 3 7.477 3 12a9 9 0 0018 0c0-4.523-3.477-10-9-10z"/></svg>
+        ${cur.relative_humidity_2m}%`;
+      document.getElementById('weatherLocation').textContent = cityName;
+    } catch {
+      document.getElementById('weatherDesc').textContent = 'Unavailable';
+      document.getElementById('weatherIcon').textContent = '❓';
+      document.getElementById('weatherIconSmall').textContent = '❓';
+      document.getElementById('weatherTempSmall').textContent = '--°';
+    }
+  }
+
+  // Hover / click to expand weather card
+  (() => {
+    const widget = document.getElementById('weatherWidget');
+    const pill   = document.getElementById('weatherPill');
+    const card   = document.getElementById('weatherCard');
+    if (!widget || !pill || !card) return;
+
+    let hoverTimer;
+
+    const openCard  = () => { clearTimeout(hoverTimer); card.classList.remove('hidden'); };
+    const closeCard = () => { hoverTimer = setTimeout(() => card.classList.add('hidden'), 150); };
+
+    // Hover (desktop)
+    pill.addEventListener('mouseenter', openCard);
+    pill.addEventListener('mouseleave', closeCard);
+    card.addEventListener('mouseenter', openCard);
+    card.addEventListener('mouseleave', closeCard);
+
+    // Click / tap (mobile)
+    pill.addEventListener('click', (e) => {
+      e.stopPropagation();
+      card.classList.toggle('hidden');
+    });
+
+    // Close on outside click
+    document.addEventListener('click', (e) => {
+      if (!widget.contains(e.target)) card.classList.add('hidden');
+    });
+  })();
+
+  // Returns centroid of all yard markers, or the map default center
+  function yardsCenter() {
+    const pts = [...yardMarkers.values()]
+      .map(m => m.getLatLng())
+      .filter(ll => ll);
+    if (!pts.length) return { lat: 32.794, lng: 35.033 };
+    const lat = pts.reduce((s, p) => s + p.lat, 0) / pts.length;
+    const lng = pts.reduce((s, p) => s + p.lng, 0) / pts.length;
+    return { lat, lng };
+  }
+
+  function fetchWeatherForYards() {
+    const { lat, lng } = yardsCenter();
+    fetchWeather(lat, lng);
+  }
+
+  // Initial fetch using default center; will be refreshed after yards load
+  fetchWeather(32.794, 35.033);
+
+  // Refresh every 15 minutes using yards centroid
+  setInterval(fetchWeatherForYards, 15 * 60 * 1000);
+
+  /* ── Today's Actions widget ──────────────────────────────────────── */
+  function buildTodayWidget(yards) {
+    const todayStr = new Date().toISOString().slice(0, 10); // 'YYYY-MM-DD'
+
+    // Collect all actions due today across all yards
+    const items = [];
+    (yards ?? []).forEach(yard => {
+      (yard.actions ?? []).forEach(a => {
+        if (!a.action_date) return;
+        if (a.action_date.slice(0, 10) === todayStr) {
+          items.push({ yard, action: a });
+        }
+      });
+    });
+
+    // Update count badge
+    const countEl = document.getElementById('todayCount');
+    if (countEl) {
+      countEl.textContent = items.length;
+      countEl.className = items.length
+        ? 'text-xs font-bold px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/30'
+        : 'text-xs font-bold px-2 py-0.5 rounded-full bg-slate-700/50 text-slate-500 border border-slate-700';
+    }
+
+    // Populate list
+    const list  = document.getElementById('todayList');
+    const empty = document.getElementById('todayEmpty');
+    if (!list || !empty) return;
+
+    list.innerHTML = '';
+    if (items.length === 0) {
+      list.classList.add('hidden');
+      empty.classList.remove('hidden');
+    } else {
+      empty.classList.add('hidden');
+      list.classList.remove('hidden');
+      items.forEach(({ yard, action }) => {
+        const status = getActionStatus(action);
+        const style  = ACTION_STATUS_STYLE[status];
+
+        const li = document.createElement('li');
+        li.className = 'flex items-start gap-2 px-4 py-2.5 hover:bg-slate-800/40 transition';
+
+        // Dot
+        const dot = document.createElement('span');
+        dot.className = 'shrink-0 w-1.5 h-1.5 rounded-full bg-amber-400 mt-2';
+
+        // Main info (clicking opens yard modal)
+        const info = document.createElement('div');
+        info.className = 'min-w-0 flex-1 cursor-pointer';
+        info.innerHTML = `
+          <p class="font-semibold text-slate-100 truncate">${yard.name ?? 'Yard'}</p>
+          ${yard.apiaries?.name ? `<p class="text-slate-500 truncate text-[11px]">${yard.apiaries.name}</p>` : ''}
+        `;
+        info.addEventListener('click', () => {
+          document.getElementById('todayBody').classList.add('hidden');
+          document.getElementById('todayChevron').style.transform = '';
+          document.getElementById('todayWidgetToggle').setAttribute('aria-expanded', 'false');
+          const marker = yardMarkers.get(yard.id);
+          if (marker) map.setView(marker.getLatLng(), Math.max(map.getZoom(), 15));
+          handleMarkerClick(yard);
+        });
+
+        // Action type — clicking opens inline date reschedule
+        const actionRow = document.createElement('div');
+        actionRow.className = 'flex items-center gap-1 mt-0.5';
+
+        const actionLabel = document.createElement('span');
+        actionLabel.className = 'text-slate-400 text-xs truncate cursor-pointer hover:text-amber-300 underline underline-offset-2 decoration-dotted transition';
+        actionLabel.title = 'Click to reschedule';
+        actionLabel.textContent = action.action_type ?? action.title ?? 'Action';
+
+        // Hidden date input
+        const dateInput = document.createElement('input');
+        dateInput.type = 'date';
+        dateInput.value = action.action_date?.slice(0, 10) ?? '';
+        dateInput.className = 'hidden text-xs bg-slate-700 border border-slate-600 rounded px-1.5 py-0.5 text-slate-100 focus:outline-none focus:border-amber-400';
+
+        actionLabel.addEventListener('click', (e) => {
+          e.stopPropagation();
+          actionLabel.classList.add('hidden');
+          dateInput.classList.remove('hidden');
+          dateInput.focus();
+          dateInput.showPicker?.();
+        });
+
+        dateInput.addEventListener('change', async () => {
+          const newDate = dateInput.value;
+          if (!newDate) return;
+          dateInput.disabled = true;
+
+          const { error } = await db.from('actions').update({ action_date: newDate }).eq('id', action.id);
+
+          if (error) {
+            setStatus('Reschedule failed: ' + error.message, true);
+            dateInput.disabled = false;
+            return;
+          }
+
+          // Update cached yard data
+          action.action_date = newDate;
+          const m = yardMarkers.get(yard.id);
+          if (m) {
+            const acts = (m._yard.actions ?? []).map(x =>
+              x.id === action.id ? { ...x, action_date: newDate } : x
+            );
+            m._yard = { ...m._yard, actions: acts };
+            upsertMarker(m._yard);
+          }
+
+          setStatus('Action rescheduled');
+          // Rebuild widget — action may no longer be "today"
+          buildTodayWidget([...yardMarkers.values()].map(m => m._yard));
+        });
+
+        dateInput.addEventListener('blur', () => {
+          dateInput.classList.add('hidden');
+          actionLabel.classList.remove('hidden');
+        });
+
+        actionRow.append(actionLabel, dateInput);
+        info.appendChild(actionRow);
+
+        // Status badge
+        const badge = document.createElement('span');
+        badge.className = `shrink-0 self-center text-[10px] px-1.5 py-0.5 rounded-full font-semibold ${style.cls}`;
+        badge.textContent = style.label;
+
+        li.append(dot, info, badge);
+        list.appendChild(li);
+      });
+    }
+  }
+
+  // Toggle expand/collapse
+  document.getElementById('todayWidgetToggle')?.addEventListener('click', () => {
+    const body    = document.getElementById('todayBody');
+    const chevron = document.getElementById('todayChevron');
+    const toggle  = document.getElementById('todayWidgetToggle');
+    const open    = body.classList.toggle('hidden') === false;
+    toggle.setAttribute('aria-expanded', open);
+    chevron.style.transform = open ? 'rotate(180deg)' : '';
+  });
+
   /* ══════════════════════════════════════════════════════════════════
      MARKER COLOUR LOGIC
      ─────────────────────────────────────────────────────────────────
@@ -56,23 +456,33 @@
    * @param {Object} yard  Row from `yards` joined with `actions[]`
    * @returns {'attention'|'future'|'unseen'|'default'}
    */
+  /* Returns 'planned' | 'waiting' | 'done' for a single action */
+  function getActionStatus(action) {
+    if (action.is_done) return 'done';
+    const now = new Date();
+    const dt  = action.action_date ? new Date(action.action_date) : null;
+    if (!dt || dt > now) return 'planned';
+    return 'waiting';
+  }
+
   function resolveMarkerKind(yard) {
     if (yard.status === 'attention') return 'attention';
 
     const now     = new Date();
-    const actions = Array.isArray(yard.actions) ? yard.actions : [];
+    const actions = (Array.isArray(yard.actions) ? yard.actions : [])
+      .filter(a => !a.is_done); // ignore completed actions
     const seen    = yard.last_seen_at ? new Date(yard.last_seen_at) : null;
 
-    // Rule 2 — upcoming action
+    // Rule 2 — upcoming planned action
     const hasFuture = actions.some((a) => a.action_date && new Date(a.action_date) > now);
     if (hasFuture) return 'future';
 
-    // Rule 3 — past action that hasn't been seen yet
+    // Rule 3 — waiting (past, unseen) action
     const hasUnseen = actions.some((a) => {
       if (!a.action_date) return false;
       const ad = new Date(a.action_date);
-      if (ad > now) return false;             // future — handled above
-      if (seen && ad <= seen) return false;   // already seen
+      if (ad > now) return false;
+      if (seen && ad <= seen) return false;
       return true;
     });
     if (hasUnseen) return 'unseen';
@@ -160,10 +570,77 @@
      MARKER MANAGEMENT
      ══════════════════════════════════════════════════════════════════ */
 
+  let _justDragged = false; // suppress click that fires right after dragend
+
   function attachClick(marker) {
     marker.off('click');
     marker.on('click', function () {
+      if (_justDragged) { _justDragged = false; return; }
       handleMarkerClick(this._yard);
+    });
+  }
+
+  function buildTooltipContent(yard) {
+    const lines = [`<strong>${yard.name ?? 'Yard'}</strong>`];
+    if (yard.apiaries?.name) lines.push(`🏠 ${yard.apiaries.name}`);
+    if (yard.location)       lines.push(`📍 ${yard.location}`);
+
+    const now = new Date();
+    const futureActions = (yard.actions ?? [])
+      .filter(a => a.action_date && new Date(a.action_date) > now)
+      .sort((a, b) => new Date(a.action_date) - new Date(b.action_date));
+
+    if (futureActions.length) {
+      lines.push('<span style="color:#86efac;font-size:0.74rem;margin-top:2px;display:block">📅 Upcoming:</span>');
+      futureActions.forEach(a => {
+        const d = new Date(a.action_date).toLocaleDateString(undefined, { day:'2-digit', month:'short', year:'numeric' });
+        lines.push(`&nbsp;&nbsp;• ${a.action_type ?? a.title ?? 'Action'} <span style="color:#94a3b8">(${d})</span>`);
+      });
+    }
+
+    return lines.join('<br>');
+  }
+
+  function attachTooltip(marker) {
+    const content = buildTooltipContent(marker._yard);
+    if (marker.getTooltip()) {
+      marker.setTooltipContent(content);
+    } else {
+      marker.bindTooltip(content, {
+        direction:  'top',
+        offset:     [0, -58],
+        opacity:    0.97,
+        className:  'bl-tooltip',
+      });
+    }
+  }
+
+  function attachDrag(marker) {
+    marker.off('dragstart dragend');
+
+    marker.on('dragstart', () => {
+      _justDragged = false;
+      marker.getElement()?.style.setProperty('opacity', '0.65');
+      marker.getElement()?.style.setProperty('filter', 'drop-shadow(0 0 8px #facc15)');
+      setStatus(`Dragging "${marker._yard?.name ?? 'yard'}" — release to set new location`);
+    });
+
+    marker.on('dragend', async (e) => {
+      _justDragged = true;
+      marker.getElement()?.style.removeProperty('opacity');
+      marker.getElement()?.style.removeProperty('filter');
+
+      const { lat, lng } = e.target.getLatLng();
+      const yardSnapshot = marker._yard; // capture before async
+
+      const ok = await saveRelocate(yardSnapshot, lat, lng, { silent: true });
+
+      if (!ok) {
+        // Restore original position on failure
+        marker.setLatLng([yardSnapshot.lat, yardSnapshot.lng]);
+      }
+
+      setTimeout(() => { _justDragged = false; }, 400);
     });
   }
 
@@ -181,14 +658,18 @@
       m.setIcon(icon);
       m._yard = yard;
       attachClick(m);
+      attachTooltip(m);
+      attachDrag(m);
       return;
     }
 
-    m = L.marker([lat, lng], { icon, riseOnHover: true });
+    m = L.marker([lat, lng], { icon, riseOnHover: true, draggable: true });
     m._yard = yard;
     attachClick(m);
+    attachDrag(m);
     markersLayer.addLayer(m);
     yardMarkers.set(yard.id, m);
+    attachTooltip(m);
   }
 
   /* ══════════════════════════════════════════════════════════════════
@@ -198,23 +679,32 @@
   async function handleMarkerClick(yard) {
     const ts = new Date().toISOString();
 
-    // Update last_seen_at and return the full row (with actions join)
-    const { data, error } = await db
+    const { error: updateError } = await db
       .from('yards')
       .update({ last_seen_at: ts })
-      .eq('id', yard.id)
+      .eq('id', yard.id);
+
+    if (updateError) {
+      console.error('[BeeLinked] last_seen_at update failed:', updateError.message);
+      openModal({ ...yard, last_seen_at: ts });
+      setStatus('Warning: sync failed — ' + updateError.message, true);
+      return;
+    }
+
+    const { data, error: fetchError } = await db
+      .from('yards')
       .select('*, actions(*), apiaries(id, name)')
+      .eq('id', yard.id)
       .single();
 
-    if (error) {
-      console.error('[BeeLinked] last_seen_at update failed:', error.message);
+    if (fetchError) {
+      console.error('[BeeLinked] yard fetch failed:', fetchError.message);
       openModal({ ...yard, last_seen_at: ts });
-      setStatus('Warning: sync failed — ' + error.message, true);
       return;
     }
 
     const updated = data ?? { ...yard, last_seen_at: ts };
-    upsertMarker(updated);   // refresh icon colour
+    upsertMarker(updated);
     openModal(updated);
     setStatus('Viewed: ' + (updated.name ?? updated.id));
   }
@@ -257,61 +747,102 @@
     return wrap;
   }
 
+  const ACTION_STATUS_STYLE = {
+    planned: { label: 'Planned',  cls: 'bg-green-900/60 text-green-300',   itemCls: 'action-future' },
+    waiting: { label: 'Waiting',  cls: 'bg-orange-900/60 text-orange-300', itemCls: 'action-past'   },
+    done:    { label: 'Done',     cls: 'bg-slate-700/80 text-slate-400',   itemCls: 'action-done'   },
+  };
+
   function makeActionItem(action, onDeleted) {
-    const now      = new Date();
-    const dt       = action.action_date ? new Date(action.action_date) : null;
-    const isFuture = dt && dt > now;
+    const status  = getActionStatus(action);
+    const style   = ACTION_STATUS_STYLE[status];
+    const dt      = action.action_date ? new Date(action.action_date) : null;
 
     const item = document.createElement('div');
-    item.className = `rounded-lg bg-slate-800/60 px-3 py-2.5 text-sm ${isFuture ? 'action-future' : 'action-past'} transition-all duration-200`;
+    item.className = `rounded-lg px-3 py-2.5 text-sm transition-all duration-200 ${
+      status === 'done' ? 'bg-slate-800/30 opacity-60' : 'bg-slate-800/60'
+    } ${style.itemCls}`;
 
     const header = document.createElement('div');
-    header.className = 'flex items-center justify-between gap-2 mb-1';
+    header.className = 'flex items-center gap-2 mb-1';
 
     const title = document.createElement('span');
-    title.className = 'font-medium text-slate-100 truncate';
+    title.className = `font-medium truncate flex-1 min-w-0 ${status === 'done' ? 'line-through text-slate-400' : 'text-slate-100'}`;
     title.textContent = action.title || action.action_type || 'Action';
 
+    // Fixed-width right column so status + buttons always align
+    const controls = document.createElement('div');
+    controls.className = 'shrink-0 flex items-center gap-1';
+    controls.style.width = '100px';
+
     const pill = document.createElement('span');
-    pill.className = `shrink-0 text-[10px] px-1.5 py-0.5 rounded-full font-semibold ${
-      isFuture ? 'bg-green-900/60 text-green-300' : 'bg-yellow-900/50 text-yellow-300'
+    pill.className = `text-[10px] px-1.5 py-0.5 rounded-full font-semibold w-16 text-center ${style.cls}`;
+    pill.textContent = style.label;
+
+    // Mark-done button (hidden for already-done actions)
+    const doneBtn = document.createElement('button');
+    doneBtn.type = 'button';
+    doneBtn.title = 'Mark as done';
+    doneBtn.className = `shrink-0 p-1 rounded-md transition active:scale-90 ${
+      status === 'done'
+        ? 'hidden'
+        : 'text-slate-500 hover:text-emerald-400 hover:bg-emerald-900/20'
     }`;
-    pill.textContent = isFuture ? 'Upcoming' : 'Past';
+    doneBtn.innerHTML = `<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
+      <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/>
+    </svg>`;
+
+    doneBtn.addEventListener('click', async () => {
+      doneBtn.disabled = true;
+      doneBtn.innerHTML = `<svg class="w-3.5 h-3.5 animate-spin" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 3v3m0 12v3M3 12h3m12 0h3"/></svg>`;
+
+      const { error } = await db.from('actions').update({ is_done: true }).eq('id', action.id);
+
+      if (error) {
+        doneBtn.disabled = false;
+        doneBtn.innerHTML = `<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>`;
+        setStatus('Failed to mark done: ' + error.message, true);
+        return;
+      }
+
+      action.is_done = true;
+      // Re-render item in-place
+      const fresh = makeActionItem(action, onDeleted);
+      item.replaceWith(fresh);
+      if (onDeleted) onDeleted(action.id, true); // true = refresh marker only
+      setStatus('Action marked as done');
+    });
 
     // Delete button
     const delBtn = document.createElement('button');
     delBtn.type = 'button';
     delBtn.title = 'Delete this action';
-    delBtn.className = 'shrink-0 ml-1 p-1 rounded-md text-slate-500 hover:text-red-400 hover:bg-red-900/20 active:scale-90 transition';
+    delBtn.className = 'shrink-0 p-1 rounded-md text-slate-500 hover:text-red-400 hover:bg-red-900/20 active:scale-90 transition';
     delBtn.innerHTML = `<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24">
       <path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6M1 7h22M8 7V4a1 1 0 011-1h6a1 1 0 011 1v3"/>
     </svg>`;
 
     delBtn.addEventListener('click', async () => {
-      // Switch to a confirming state
       if (!delBtn.dataset.confirm) {
         delBtn.dataset.confirm = '1';
         delBtn.title = 'Click again to confirm delete';
-        delBtn.className = 'shrink-0 ml-1 px-2 py-0.5 rounded-md text-[11px] font-semibold text-red-400 border border-red-700 bg-red-900/30 hover:bg-red-800/50 active:scale-90 transition';
+        delBtn.className = 'shrink-0 px-2 py-0.5 rounded-md text-[11px] font-semibold text-red-400 border border-red-700 bg-red-900/30 hover:bg-red-800/50 active:scale-90 transition';
         delBtn.textContent = 'Confirm';
-        // Auto-cancel after 3 s
         setTimeout(() => {
           if (delBtn.dataset.confirm) {
             delete delBtn.dataset.confirm;
             delBtn.title = 'Delete this action';
-            delBtn.className = 'shrink-0 ml-1 p-1 rounded-md text-slate-500 hover:text-red-400 hover:bg-red-900/20 active:scale-90 transition';
+            delBtn.className = 'shrink-0 p-1 rounded-md text-slate-500 hover:text-red-400 hover:bg-red-900/20 active:scale-90 transition';
             delBtn.innerHTML = `<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6M1 7h22M8 7V4a1 1 0 011-1h6a1 1 0 011 1v3"/></svg>`;
           }
         }, 3000);
         return;
       }
 
-      // Confirmed — delete
       delBtn.disabled = true;
       delBtn.textContent = '…';
 
       const { error } = await db.from('actions').delete().eq('id', action.id);
-
       if (error) {
         delBtn.disabled = false;
         delBtn.textContent = 'Error';
@@ -319,7 +850,6 @@
         return;
       }
 
-      // Animate out and remove
       item.style.opacity = '0';
       item.style.transform = 'scale(0.95)';
       setTimeout(() => {
@@ -330,7 +860,8 @@
       setStatus('Action deleted');
     });
 
-    header.append(title, pill, delBtn);
+    controls.append(pill, doneBtn, delBtn);
+    header.append(title, controls);
 
     const date = document.createElement('p');
     date.className = 'text-xs text-slate-400';
@@ -364,17 +895,70 @@
     const val = document.createElement('span');
     val.className = 'text-slate-100 text-sm flex-1 min-w-0 truncate';
     val.textContent = yard.lat != null
-      ? `${Number(yard.lat).toFixed(5)}, ${Number(yard.lng).toFixed(5)}`
+      ? `${Number(yard.lat).toFixed(6)}, ${Number(yard.lng).toFixed(6)}`
       : '—';
 
     const btn = document.createElement('button');
     btn.type = 'button';
     btn.title = 'Relocate this yard on the map';
-    btn.className = 'shrink-0 flex items-center gap-1 text-[11px] font-semibold text-emerald-400 hover:text-emerald-300 px-1.5 py-0.5 rounded-md hover:bg-emerald-900/30 active:scale-95 transition';
-    btn.innerHTML = `<svg class="w-3 h-3" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/><path stroke-linecap="round" stroke-linejoin="round" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"/></svg>Relocate`;
+    btn.className = 'shrink-0 flex items-center justify-center text-emerald-400 hover:text-emerald-300 w-7 h-7 rounded-md hover:bg-emerald-900/30 active:scale-95 transition';
+    btn.innerHTML = `<svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/><path stroke-linecap="round" stroke-linejoin="round" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"/></svg>`;
     btn.addEventListener('click', () => startRelocate(yard));
 
-    valRow.append(val, btn);
+    // Navigate button
+    const navBtn = document.createElement('button');
+    navBtn.type = 'button';
+    navBtn.title = 'Navigate to this yard';
+    navBtn.className = 'shrink-0 flex items-center justify-center text-sky-400 hover:text-sky-300 w-7 h-7 rounded-md hover:bg-sky-900/30 active:scale-95 transition';
+    navBtn.innerHTML = `<svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-1.447-.894L15 9m0 8V9m0 0L9 7"/></svg>`;
+
+    navBtn.addEventListener('click', () => {
+      if (yard.lat == null || yard.lng == null) return;
+      const lat = Number(yard.lat), lng = Number(yard.lng);
+
+      // Build a small picker popup
+      const existing = document.getElementById('bl-nav-picker');
+      if (existing) existing.remove();
+
+      const picker = document.createElement('div');
+      picker.id = 'bl-nav-picker';
+      picker.className = 'absolute z-[9999] bg-[#1e293b] border border-slate-700 rounded-xl shadow-2xl p-2 flex flex-col gap-1 text-sm';
+      picker.style.cssText = 'min-width:160px';
+
+      const makePick = (label, icon, url) => {
+        const a = document.createElement('a');
+        a.href = url;
+        a.target = '_blank';
+        a.rel = 'noopener noreferrer';
+        a.className = 'flex items-center gap-2 px-3 py-2 rounded-lg text-slate-200 hover:bg-slate-700 transition cursor-pointer font-medium';
+        a.innerHTML = `${icon} ${label}`;
+        a.addEventListener('click', () => picker.remove());
+        return a;
+      };
+
+      picker.append(
+        makePick('Google Maps', '🗺️', `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}`),
+        makePick('Waze',        '🚗', `https://waze.com/ul?ll=${lat},${lng}&navigate=yes`),
+      );
+
+      // Position near the button
+      const rect = navBtn.getBoundingClientRect();
+      picker.style.top  = `${rect.bottom + window.scrollY + 4}px`;
+      picker.style.left = `${rect.left   + window.scrollX}px`;
+      picker.style.position = 'fixed';
+      picker.style.top  = `${rect.bottom + 4}px`;
+      picker.style.left = `${rect.left}px`;
+
+      document.body.appendChild(picker);
+
+      // Close on outside click
+      setTimeout(() => {
+        const close = (e) => { if (!picker.contains(e.target)) { picker.remove(); document.removeEventListener('click', close); } };
+        document.addEventListener('click', close);
+      }, 0);
+    });
+
+    valRow.append(val, navBtn, btn);
     wrap.append(lbl, valRow);
     return wrap;
   }
@@ -430,24 +1014,36 @@
         return db2 - da;
       });
 
-      const onDeleted = (deletedId) => {
-        remaining -= 1;
-        if (remaining <= 0) {
-          actionsWrap.classList.add('hidden');
-        } else {
-          countBadge.textContent = `(${remaining})`;
+      const onDeleted = (deletedId, isDoneOnly = false) => {
+        if (!isDoneOnly) {
+          remaining -= 1;
+          if (remaining <= 0) {
+            actionsWrap.classList.add('hidden');
+          } else {
+            countBadge.textContent = `(${remaining})`;
+          }
         }
         // Keep marker colour in sync
         if (_currentModalYard) {
           const m = yardMarkers.get(_currentModalYard.id);
           if (m) {
-            m._yard = {
-              ...m._yard,
-              actions: (m._yard.actions ?? []).filter((x) => x.id !== deletedId),
-            };
+            if (isDoneOnly) {
+              // Mark the action as done in the cached yard data
+              const acts = (m._yard.actions ?? []).map(x =>
+                x.id === deletedId ? { ...x, is_done: true } : x
+              );
+              m._yard = { ...m._yard, actions: acts };
+            } else {
+              m._yard = {
+                ...m._yard,
+                actions: (m._yard.actions ?? []).filter((x) => x.id !== deletedId),
+              };
+            }
             upsertMarker(m._yard);
           }
         }
+        // Rebuild Today's widget so status badge reflects the change
+        buildTodayWidget([...yardMarkers.values()].map(m => m._yard));
       };
 
       sorted.forEach((a) => actionsList.append(makeActionItem(a, onDeleted)));
@@ -479,6 +1075,7 @@
 
   /* ── Apiaries ────────────────────────────────────────────────── */
   let _apiaries = []; // [{ id, name }, ...]
+  let _mapApiaryFilter = 'all'; // 'all' or apiary id (string)
 
   async function loadApiaries() {
     const { data, error } = await db
@@ -490,6 +1087,56 @@
       return;
     }
     _apiaries = data ?? [];
+    buildApiaryFilterBar();
+  }
+
+  function buildApiaryFilterBar() {
+    const bar = document.getElementById('apiaryFilterBar');
+    if (!bar) return;
+
+    // Keep the "All" button, remove the rest
+    bar.innerHTML = '';
+
+    const allBtn = document.createElement('button');
+    allBtn.dataset.apiaryFilter = 'all';
+    allBtn.className = 'apiary-filter-btn shrink-0 px-3 py-1 rounded-full text-xs font-semibold border transition whitespace-nowrap' +
+      (_mapApiaryFilter === 'all' ? ' active' : '');
+    allBtn.textContent = 'All Apiaries';
+    bar.appendChild(allBtn);
+
+    _apiaries.forEach(({ id, name }) => {
+      const btn = document.createElement('button');
+      btn.dataset.apiaryFilter = String(id);
+      btn.className = 'apiary-filter-btn shrink-0 px-3 py-1 rounded-full text-xs font-semibold border transition whitespace-nowrap' +
+        (String(id) === _mapApiaryFilter ? ' active' : '');
+      btn.textContent = name;
+      bar.appendChild(btn);
+    });
+
+    // Single delegated listener
+    bar.onclick = (e) => {
+      const btn = e.target.closest('[data-apiary-filter]');
+      if (!btn) return;
+      _mapApiaryFilter = btn.dataset.apiaryFilter;
+      bar.querySelectorAll('.apiary-filter-btn').forEach(b =>
+        b.classList.toggle('active', b.dataset.apiaryFilter === _mapApiaryFilter)
+      );
+      applyMapApiaryFilter();
+    };
+  }
+
+  function applyMapApiaryFilter() {
+    yardMarkers.forEach((marker, yardId) => {
+      const yard = marker._yard;
+      const show = _mapApiaryFilter === 'all' ||
+        String(yard.apiary_id) === _mapApiaryFilter ||
+        String(yard.apiaries?.id) === _mapApiaryFilter;
+      if (show) {
+        if (!markersLayer.hasLayer(marker)) markersLayer.addLayer(marker);
+      } else {
+        if (markersLayer.hasLayer(marker)) markersLayer.removeLayer(marker);
+      }
+    });
   }
 
   function populateApiaryDropdown(selectId, selectedId = null) {
@@ -528,8 +1175,13 @@
     }
 
     rows.forEach((yard) => upsertMarker(yard));
+    applyMapApiaryFilter();
+    buildTodayWidget(rows);
 
     setStatus(`${rows.length} yard${rows.length === 1 ? '' : 's'} loaded`);
+
+    // Refresh weather to the centroid of the actual yards
+    fetchWeatherForYards();
   }
 
   /* ── UI controls ─────────────────────────────────────────────────── */
@@ -635,7 +1287,7 @@
     enterRelocateMode(yard);
   }
 
-  async function saveRelocate(yard, lat, lng) {
+  async function saveRelocate(yard, lat, lng, { silent = false } = {}) {
     setStatus('Updating location…');
 
     const { error: updateError } = await db
@@ -646,7 +1298,7 @@
     if (updateError) {
       setStatus('Relocate failed: ' + updateError.message, true);
       console.error('[BeeLinked] saveRelocate update:', updateError);
-      return;
+      return false;
     }
 
     const { data: refreshed, error: fetchError } = await db
@@ -658,14 +1310,27 @@
     if (fetchError) {
       setStatus('Relocate failed: ' + fetchError.message, true);
       console.error('[BeeLinked] saveRelocate fetch:', fetchError);
-      return;
+      return false;
     }
 
     const updated = refreshed ?? { ...yard, lat, lng };
-    upsertMarker(updated);
-    map.panTo([lat, lng], { animate: true });
-    openModal(updated);
+
+    if (silent) {
+      // Drag-drop: update marker data & icon without resetting its position
+      const m = yardMarkers.get(updated.id);
+      if (m) {
+        m._yard = updated;
+        m.setIcon(buildDivIcon(resolveMarkerKind(updated), updated));
+        attachTooltip(m);
+      }
+    } else {
+      upsertMarker(updated);
+      map.panTo([lat, lng], { animate: true });
+      openModal(updated);
+    }
+
     setStatus(`"${updated.name}" relocated`);
+    return true;
   }
 
   async function saveNewYard(name, hiveCount, apiaryId, lat, lng) {
@@ -754,7 +1419,7 @@
     });
   });
 
-  function openNewActionModal() {
+  function openNewActionModal(preselectedYardId = null) {
     setFab(false);
 
     // Populate yard dropdown (sorted alphabetically)
@@ -768,6 +1433,9 @@
         const opt = document.createElement('option');
         opt.value       = yard.id;
         opt.textContent = yard.name ?? yard.id;
+        if (preselectedYardId != null && String(yard.id) === String(preselectedYardId)) {
+          opt.selected = true;
+        }
         sel.appendChild(opt);
       });
 
@@ -916,6 +1584,10 @@
           ${!upcoming.length && !past.length ? `<span class="text-[11px] text-hive-muted">None</span>` : ''}
         </div></td>`,
     },
+    apiary: {
+      label: 'Apiary', sortKey: 'apiary',
+      renderTd: (y) => `<td class="px-4 py-3 text-center text-slate-300">${y.apiaries?.name ?? '—'}</td>`,
+    },
     mapview: {
       label: 'Map View', sortKey: null,
       renderTd: () => `<td class="px-4 py-3 text-center">
@@ -930,7 +1602,7 @@
     },
   };
 
-  const DEFAULT_COL_ORDER = ['name', 'location', 'hives', 'status', 'seen', 'actions', 'mapview'];
+  const DEFAULT_COL_ORDER = ['name', 'apiary', 'location', 'hives', 'status', 'seen', 'actions', 'mapview'];
 
   function loadColOrder() {
     try {
@@ -1045,12 +1717,37 @@
   let _searchTerm       = '';
   let _filterStatus     = '';
   let _filterActionType = '';   // '' | 'none' | any action type string
+  let _filterApiary     = '';   // '' | apiary id string
   let _filterDateFrom   = '';   // ISO date string e.g. '2025-01-01'
   let _filterDateTo     = '';
 
   const STATUS_FILTER_LABELS = { '': 'Status', active: 'Active', attention: 'Attention', inactive: 'Inactive' };
 
   /* Build the Actions filter menu from live Supabase data */
+  function populateApiaryFilterMenu() {
+    const menu = document.getElementById('filterApiaryMenu');
+    menu.innerHTML = '';
+
+    const makeOpt = (label, val) => {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'lv-filter-opt w-full text-left px-4 py-2.5 text-sm text-slate-300 hover:bg-hive-card hover:text-white transition';
+      btn.dataset.filter = 'apiary';
+      btn.dataset.val    = val;
+      btn.textContent    = label;
+      return btn;
+    };
+
+    menu.appendChild(makeOpt('All Apiaries', ''));
+
+    if (_apiaries.length > 0) {
+      const div = document.createElement('div');
+      div.className = 'border-t border-hive-border/60';
+      menu.appendChild(div);
+      _apiaries.forEach(({ id, name }) => menu.appendChild(makeOpt(name, String(id))));
+    }
+  }
+
   function populateActionsFilterMenu() {
     const menu = document.getElementById('filterActionsMenu');
     menu.innerHTML = '';
@@ -1092,8 +1789,9 @@
   function updateFilterButtons() {
     const hasStatus  = _filterStatus     !== '';
     const hasAction  = _filterActionType !== '';
+    const hasApiary  = _filterApiary     !== '';
     const hasDate    = _filterDateFrom   !== '' || _filterDateTo !== '';
-    const hasAny     = hasStatus || hasAction || hasDate || _searchTerm !== '';
+    const hasAny     = hasStatus || hasAction || hasApiary || hasDate || _searchTerm !== '';
 
     // Status button
     const sBtn = document.getElementById('filterStatusBtn');
@@ -1111,6 +1809,16 @@
     aBtn.classList.toggle('border-amber-500/70', hasAction);
     aBtn.classList.toggle('text-amber-300',      hasAction);
     aBtn.classList.toggle('bg-amber-900/20',     hasAction);
+
+    // Apiary button
+    const apBtn   = document.getElementById('filterApiaryBtn');
+    const apLabel = hasApiary
+      ? (_apiaries.find((a) => String(a.id) === _filterApiary)?.name ?? 'Apiary')
+      : 'Apiary';
+    document.getElementById('filterApiaryLabel').textContent = apLabel;
+    apBtn.classList.toggle('border-amber-500/70', hasApiary);
+    apBtn.classList.toggle('text-amber-300',      hasApiary);
+    apBtn.classList.toggle('bg-amber-900/20',     hasApiary);
 
     // Date button
     const dBtn = document.getElementById('filterDateBtn');
@@ -1130,7 +1838,8 @@
     document.querySelectorAll('.lv-filter-opt').forEach((opt) => {
       const isActive =
         (opt.dataset.filter === 'status'     && opt.dataset.val === _filterStatus)     ||
-        (opt.dataset.filter === 'actiontype' && opt.dataset.val === _filterActionType);
+        (opt.dataset.filter === 'actiontype' && opt.dataset.val === _filterActionType) ||
+        (opt.dataset.filter === 'apiary'     && opt.dataset.val === _filterApiary);
       opt.classList.toggle('text-amber-300', isActive);
       opt.classList.toggle('bg-hive-card',   isActive);
       opt.classList.toggle('font-semibold',  isActive);
@@ -1154,6 +1863,9 @@
             return _sortDir === 'asc' ? va - vb : vb - va;
           case 'status':
             va = a.status ?? ''; vb = b.status ?? '';
+            break;
+          case 'apiary':
+            va = a.apiaries?.name ?? ''; vb = b.apiaries?.name ?? '';
             break;
           case 'location':
             va = a.location ?? ''; vb = b.location ?? '';
@@ -1190,6 +1902,9 @@
       // Status filter
       if (_filterStatus && (y.status ?? 'active') !== _filterStatus) return false;
 
+      // Apiary filter
+      if (_filterApiary && String(y.apiaries?.id ?? y.apiary_id ?? '') !== _filterApiary) return false;
+
       // Action type filter
       const acts = Array.isArray(y.actions) ? y.actions : [];
       if (_filterActionType === 'none' && acts.length > 0) return false;
@@ -1219,7 +1934,7 @@
     updateFilterButtons();
 
     const totalYards = [...yardMarkers.values()].filter((m) => m._yard).length;
-    const isFiltered = q || _filterStatus || _filterActionType || _filterDateFrom || _filterDateTo;
+    const isFiltered = q || _filterStatus || _filterActionType || _filterApiary || _filterDateFrom || _filterDateTo;
     document.getElementById('listViewCount').textContent = isFiltered
       ? `${yards.length} of ${totalYards}`
       : `${yards.length} yard${yards.length !== 1 ? 's' : ''}`;
@@ -1348,12 +2063,14 @@
     _searchTerm       = '';
     _filterStatus     = '';
     _filterActionType = '';
+    _filterApiary     = '';
     _filterDateFrom   = '';
     _filterDateTo     = '';
     document.getElementById('listViewSearch').value  = '';
     document.getElementById('filterDateFrom').value  = '';
     document.getElementById('filterDateTo').value    = '';
     closeAllFilterMenus();
+    populateApiaryFilterMenu();
     populateActionsFilterMenu();
     buildListView();
     document.getElementById('listViewModal').classList.remove('hidden');
@@ -1482,6 +2199,7 @@
   /* ── Event listeners ──────────────────────────────────────────── */
   document.getElementById('listViewBtn').addEventListener('click', openListView);
   document.getElementById('listViewClose').addEventListener('click', closeListView);
+  document.getElementById('listViewBackBtn').addEventListener('click', closeListView);
   document.getElementById('listViewExportBtn').addEventListener('click', exportToExcel);
   document.getElementById('listViewShareBtn').addEventListener('click', shareListView);
 
@@ -1539,11 +2257,22 @@
     updateFilterButtons();
   });
 
+  // Apiary filter toggle + selection
+  document.getElementById('filterApiaryBtn').addEventListener('click', (e) => toggleMenu('filterApiaryMenu', e));
+  document.getElementById('filterApiaryMenu').addEventListener('click', (e) => {
+    const opt = e.target.closest('.lv-filter-opt');
+    if (!opt) return;
+    _filterApiary = opt.dataset.val;
+    closeAllFilterMenus();
+    buildListView();
+  });
+
   // Clear ALL filters
   document.getElementById('listViewClearFilters').addEventListener('click', () => {
     _searchTerm       = '';
     _filterStatus     = '';
     _filterActionType = '';
+    _filterApiary     = '';
     _filterDateFrom   = '';
     _filterDateTo     = '';
     document.getElementById('listViewSearch').value = '';
@@ -1556,6 +2285,7 @@
   document.getElementById('listViewModal').addEventListener('click', (e) => {
     if (!e.target.closest('#filterStatusWrap') &&
         !e.target.closest('#filterActionsWrap') &&
+        !e.target.closest('#filterApiaryWrap') &&
         !e.target.closest('#filterDateWrap')) {
       closeAllFilterMenus();
     }
@@ -1585,6 +2315,13 @@
     if (_currentModalYard) openEditYardModal(_currentModalYard);
   });
 
+  document.getElementById('modalAddActionBtn').addEventListener('click', () => {
+    if (!_currentModalYard) return;
+    const yardId = _currentModalYard.id;
+    closeModal();
+    openNewActionModal(yardId);
+  });
+
   document.getElementById('modalShareBtn').addEventListener('click', async () => {
     const yard = _currentModalYard;
     if (!yard) return;
@@ -1600,7 +2337,7 @@
       yard.location        ? `📍 Location: ${yard.location}` : null,
       `🪣 Hives: ${yard.hive_count ?? 0}`,
       `⚡ Status: ${yard.status ?? 'active'}`,
-      yard.lat != null     ? `🗺️ Coords: ${Number(yard.lat).toFixed(5)}, ${Number(yard.lng).toFixed(5)}` : null,
+      yard.lat != null     ? `🗺️ Coords: ${Number(yard.lat).toFixed(6)}, ${Number(yard.lng).toFixed(6)}` : null,
       yard.last_seen_at    ? `👁️ Last seen: ${fmt(yard.last_seen_at)}` : null,
       actions.length       ? `\n📋 Actions (${actions.length}):` : null,
       ...upcoming.map((a) => `  • [Upcoming] ${a.title || a.action_type} — ${a.action_date ? fmtDate(a.action_date) : 'no date'}`),

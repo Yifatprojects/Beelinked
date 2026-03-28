@@ -188,6 +188,45 @@ input, select, textarea {
   .bl-modal-sheet { animation: fadeIn 0.2s ease both; }
 }
 
+/* Scrollbar hide utility */
+.scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
+.scrollbar-hide::-webkit-scrollbar { display: none; }
+
+.apiary-filter-btn {
+  background: transparent;
+  border-color: #334155;
+  color: #94a3b8;
+  cursor: pointer;
+}
+.apiary-filter-btn:hover {
+  border-color: #eab308;
+  color: #fde047;
+  background: rgba(234,179,8,0.08);
+}
+.apiary-filter-btn.active {
+  background: rgba(234,179,8,0.18);
+  border-color: #eab308;
+  color: #fde047;
+}
+
+/* Yard marker tooltips */
+.bl-tooltip {
+  background: #141d2b !important;
+  border: 1px solid #243044 !important;
+  border-radius: 10px !important;
+  color: #f1f5f9 !important;
+  font-size: 0.78rem !important;
+  font-family: inherit !important;
+  padding: 6px 10px !important;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.5) !important;
+  line-height: 1.55 !important;
+  white-space: nowrap;
+  pointer-events: none;
+}
+.bl-tooltip strong { color: #fff; font-size: 0.82rem; }
+.bl-tooltip::before { border-top-color: #243044 !important; }
+.bl-tooltip.leaflet-tooltip-top::before { border-top-color: #243044 !important; }
+
 /* Action-type pill multi-select */
 .action-pill {
   display: inline-flex;

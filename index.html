@@ -51,7 +51,7 @@
       style="padding-top: max(0.75rem, env(safe-area-inset-top)); padding-bottom: 0.75rem;"
     >
       <div class="flex items-center gap-2.5 min-w-0">
-        <span class="text-2xl leading-none select-none" aria-hidden="true">🐝</span>
+        <img src="logo.png" alt="BeeLinked logo" class="h-9 w-9 rounded-lg object-contain select-none shrink-0" />
         <div class="min-w-0">
           <h1 class="text-base font-bold tracking-tight text-white leading-tight">BeeLinked</h1>
           <p class="text-[11px] text-hive-muted leading-tight">Field Management</p>
@@ -91,6 +91,91 @@
     <!-- Map area -->
     <div class="relative flex-1 min-h-0">
       <div id="map" role="application" aria-label="Beehive yards map"></div>
+
+      <!-- Apiary filter bar (floating) -->
+      <div id="apiaryFilterBar"
+        class="absolute top-3 left-1/2 z-[900] flex items-center gap-2 px-3 py-2 rounded-2xl border border-slate-700/80 bg-[#0f172a]/90 backdrop-blur-sm shadow-2xl overflow-x-auto scrollbar-hide"
+        style="transform:translateX(-50%); max-width:calc(100vw - 7rem); min-height:2.5rem"
+      >
+        <button data-apiary-filter="all"
+          class="apiary-filter-btn active shrink-0 px-3 py-1 rounded-full text-xs font-semibold border transition whitespace-nowrap"
+        >All Apiaries</button>
+      </div>
+
+      <!-- Right-side floating column (Today's Actions + Weather) -->
+      <div class="absolute top-3 right-3 z-[901] flex flex-col items-end gap-2" style="max-width:260px">
+
+        <!-- Today's Actions widget -->
+        <div id="todayWidget"
+          class="w-full rounded-2xl border border-slate-700/80 bg-[#0f172a]/90 backdrop-blur-sm shadow-2xl text-slate-100 select-none overflow-hidden">
+
+          <!-- Header (always visible, click to expand/collapse) -->
+          <button id="todayWidgetToggle"
+            class="w-full flex items-center justify-between gap-2 px-4 py-2.5 hover:bg-slate-800/50 transition"
+            aria-expanded="false">
+            <div class="flex items-center gap-2">
+              <span class="text-base leading-none">📋</span>
+              <span class="text-sm font-semibold text-white">Today's Actions</span>
+            </div>
+            <div class="flex items-center gap-2">
+              <span id="todayCount"
+                class="text-xs font-bold px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/30">
+                0
+              </span>
+              <svg id="todayChevron" class="w-3.5 h-3.5 text-slate-400 transition-transform duration-200"
+                fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/>
+              </svg>
+            </div>
+          </button>
+
+          <!-- Expandable body -->
+          <div id="todayBody" class="hidden border-t border-slate-700/60 max-h-64 overflow-y-auto">
+            <ul id="todayList" class="py-1 text-xs divide-y divide-slate-800/60"></ul>
+            <p id="todayEmpty" class="hidden px-4 py-3 text-slate-500 text-xs text-center">No actions scheduled for today</p>
+          </div>
+        </div>
+
+        <!-- Weather widget (collapsed pill → expanded card) -->
+        <div id="weatherWidget" class="relative text-slate-100 select-none" style="min-width:0">
+
+          <!-- Collapsed pill (always visible) -->
+          <div id="weatherPill"
+            class="flex items-center gap-2 px-3 py-1.5 rounded-full border border-slate-700/80 bg-[#0f172a]/90 backdrop-blur-sm shadow-lg cursor-pointer hover:border-slate-500 transition-all duration-200"
+            title="Click for full weather details">
+            <span id="weatherIconSmall" class="text-lg leading-none">⏳</span>
+            <span id="weatherTempSmall" class="text-sm font-bold">--°</span>
+          </div>
+
+          <!-- Expanded card (hidden until hover/click) -->
+          <div id="weatherCard"
+            class="hidden absolute top-full right-0 mt-2 rounded-2xl border border-slate-700/80 bg-[#0f172a]/95 backdrop-blur-sm shadow-2xl px-4 py-3"
+            style="min-width:190px;max-width:220px">
+            <div class="flex items-center justify-between gap-3">
+              <div id="weatherIcon" class="text-4xl leading-none">⏳</div>
+              <div class="flex-1 min-w-0">
+                <div class="flex items-end gap-1">
+                  <span id="weatherTemp" class="text-2xl font-bold leading-none">--</span>
+                  <span class="text-sm text-slate-400 mb-0.5">°C</span>
+                </div>
+                <div id="weatherDesc" class="text-xs text-slate-400 truncate mt-0.5">Loading…</div>
+              </div>
+            </div>
+            <div class="mt-2 pt-2 border-t border-slate-700/60 flex gap-3 text-[11px] text-slate-400">
+              <span id="weatherWind" class="flex items-center gap-1">
+                <svg class="w-3 h-3 shrink-0" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M17.657 3.757A4 4 0 0121 7.5c0 2.21-1.79 4-4 4H3"/><path stroke-linecap="round" stroke-linejoin="round" d="M14.657 18.757A4 4 0 0118 22.5c2.21 0 4-1.79 4-4s-1.79-4-4-4H3"/></svg>
+                -- km/h
+              </span>
+              <span id="weatherHumidity" class="flex items-center gap-1">
+                <svg class="w-3 h-3 shrink-0" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 2C6.477 2 3 7.477 3 12a9 9 0 0018 0c0-4.523-3.477-10-9-10z"/></svg>
+                -- %
+              </span>
+              <span id="weatherLocation" class="ml-auto truncate text-slate-500 max-w-[70px]"></span>
+            </div>
+          </div>
+        </div>
+
+      </div>
 
       <!-- Legend panel -->
       <div
@@ -355,6 +440,13 @@
         <p class="text-[11px] text-hive-muted flex-1 min-w-0 truncate">
           Opens yard · updates <code class="text-emerald-400">last_seen_at</code>
         </p>
+        <button id="modalAddActionBtn" type="button"
+          class="shrink-0 flex items-center gap-1.5 rounded-lg border border-emerald-700/60 bg-emerald-900/30 px-3 py-1.5 text-xs font-semibold text-emerald-300 hover:bg-emerald-800/40 hover:text-emerald-200 active:scale-95 transition">
+          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/>
+          </svg>
+          Add Action
+        </button>
         <button id="modalShareBtn" type="button"
           class="shrink-0 flex items-center gap-1.5 rounded-lg border border-hive-border bg-hive-card px-3 py-1.5 text-xs font-semibold text-slate-200 hover:bg-hive-panel hover:text-white active:scale-95 transition">
           <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
@@ -380,6 +472,15 @@
 
     <!-- Header -->
     <div class="shrink-0 flex items-center gap-3 px-4 py-3 border-b border-hive-border bg-hive-panel">
+      <!-- Back to Map button -->
+      <button id="listViewBackBtn" type="button"
+        class="shrink-0 flex items-center gap-1.5 rounded-lg border border-hive-border bg-hive-card px-3 py-1.5 text-xs font-semibold text-slate-200 hover:bg-hive-panel hover:text-white active:scale-95 transition">
+        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7"/>
+        </svg>
+        Map
+      </button>
+
       <svg class="w-5 h-5 shrink-0 text-amber-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
         <path stroke-linecap="round" stroke-linejoin="round" d="M3 10h18M3 6h18M3 14h18M3 18h18"/>
       </svg>
@@ -457,6 +558,19 @@
         </button>
         <div id="filterActionsMenu"
           class="lv-filter-menu hidden absolute top-full left-0 mt-1.5 z-50 min-w-[200px] max-h-72 rounded-xl border border-hive-border bg-hive-panel shadow-2xl overflow-y-auto">
+          <!-- Populated by JS -->
+        </div>
+      </div>
+
+      <!-- Apiary filter (options populated dynamically) -->
+      <div class="relative" id="filterApiaryWrap">
+        <button id="filterApiaryBtn" type="button"
+          class="lv-filter-btn flex items-center gap-1.5 rounded-lg border border-hive-border bg-hive-card px-3 py-1.5 text-xs font-semibold text-slate-300 hover:text-white hover:bg-hive-panel active:scale-95 transition">
+          <span id="filterApiaryLabel">Apiary</span>
+          <svg class="w-3 h-3 shrink-0 text-hive-muted" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/></svg>
+        </button>
+        <div id="filterApiaryMenu"
+          class="lv-filter-menu hidden absolute top-full left-0 mt-1.5 z-50 min-w-[180px] max-h-64 rounded-xl border border-hive-border bg-hive-panel shadow-2xl overflow-y-auto">
           <!-- Populated by JS -->
         </div>
       </div>
