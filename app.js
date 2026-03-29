@@ -40,6 +40,9 @@
   /** yard.id → L.Marker */
   const yardMarkers = new Map();
 
+  /** Set of yard IDs that have at least one active (unresolved) signal */
+  const _activeSignalYardIds = new Set();
+
   /* ── Current-location layer ───────────────────────────────────────── */
   let _locMarker   = null;
   let _locCircle   = null;
@@ -466,103 +469,130 @@
   }
 
   function resolveMarkerKind(yard) {
-    if (yard.status === 'attention') return 'attention';
+    // Red: active signals — highest priority
+    if (_activeSignalYardIds.has(yard.id)) return 'attention';
 
     const now     = new Date();
-    const actions = (Array.isArray(yard.actions) ? yard.actions : [])
-      .filter(a => !a.is_done); // ignore completed actions
-    const seen    = yard.last_seen_at ? new Date(yard.last_seen_at) : null;
+    const allActs = Array.isArray(yard.actions) ? yard.actions : [];
 
-    // Rule 2 — upcoming planned action
-    const hasFuture = actions.some((a) => a.action_date && new Date(a.action_date) > now);
-    if (hasFuture) return 'future';
+    if (allActs.length === 0) return 'placed';
 
-    // Rule 3 — waiting (past, unseen) action
-    const hasUnseen = actions.some((a) => {
-      if (!a.action_date) return false;
-      const ad = new Date(a.action_date);
-      if (ad > now) return false;
-      if (seen && ad <= seen) return false;
-      return true;
-    });
-    if (hasUnseen) return 'unseen';
+    const pending    = allActs.filter(a => !a.is_done);
+    const hasWaiting = pending.some(a => a.action_date && new Date(a.action_date) <= now);
+    const hasFuture  = pending.some(a => !a.action_date || new Date(a.action_date) > now);
+    const hasDone    = allActs.some(a => a.is_done);
 
-    return 'default';
+    // Green (priority 1): any future pending action
+    if (hasFuture)  return hasWaiting ? 'planned_waiting' : 'planned';
+
+    // Yellow (priority 2): has done actions and no future pending
+    if (hasDone)    return hasWaiting ? 'done_waiting' : 'done';
+
+    // White (priority 3): no future, nothing done
+    return hasWaiting ? 'placed_waiting' : 'placed';
   }
 
   /* ══════════════════════════════════════════════════════════════════
      BEEHIVE SVG ICON
-     5 stacked ellipse bands (narrowing top→ bottom widens), count badge
      ══════════════════════════════════════════════════════════════════ */
 
   /** Colours for each marker kind */
   const KIND_COLORS = {
-    //              body fill   band outline  badge border
-    attention: { fill: '#ef4444', band: '#b91c1c', badge: '#991b1b' },
-    future:    { fill: '#22c55e', band: '#15803d', badge: '#14532d' },
-    unseen:    { fill: '#eab308', band: '#a16207', badge: '#22c55e' }, // green badge = new unseen update
-    default:   { fill: '#eab308', band: '#a16207', badge: '#92400e' },
+    //                        body fill    band colour    badge border
+    attention:      { fill: '#ef4444', band: '#b91c1c', badge: '#991b1b' },
+    planned:        { fill: '#22c55e', band: '#15803d', badge: '#14532d' },
+    planned_waiting:{ fill: '#22c55e', band: '#0f172a', badge: '#14532d' }, // green + black bands
+    done:           { fill: '#eab308', band: '#a16207', badge: '#a16207' },
+    done_waiting:   { fill: '#eab308', band: '#0f172a', badge: '#a16207' }, // yellow + black bands
+    placed_waiting: { fill: '#ffffff', band: '#0f172a', badge: '#64748b' }, // white + black bands
+    placed:         { fill: '#ffffff', band: '#cbd5e1', badge: '#64748b' },
   };
 
-  /** Badge label CSS inside the modal */
+  /** Maps kind → status string written to Supabase */
+  const KIND_TO_STATUS = {
+    attention:      'attention',
+    planned:        'planned',
+    planned_waiting:'planned',
+    done:           'done',
+    done_waiting:   'done',
+    placed_waiting: 'waiting',
+    placed:         'placed',
+  };
+
+  /** Badge label + CSS for the modal status pill */
   const KIND_META = {
-    attention: { text: 'Needs Attention',  css: 'tag-attention' },
-    future:    { text: 'Action Scheduled', css: 'tag-future'    },
-    unseen:    { text: 'New Update',       css: 'tag-unseen'    },
-    default:   { text: 'Up to Date',      css: 'tag-default'   },
+    attention:      { text: 'Needs Attention', css: 'tag-attention' },
+    planned:        { text: 'Action Planned',  css: 'tag-future'    },
+    planned_waiting:{ text: 'Action Planned',  css: 'tag-future'    },
+    done:           { text: 'Actions Done',    css: 'tag-default'   },
+    done_waiting:   { text: 'Actions Done',    css: 'tag-default'   },
+    placed_waiting: { text: 'Action Waiting',  css: 'tag-unseen'    },
+    placed:         { text: 'No Actions',      css: 'tag-default'   },
   };
 
   /**
-   * Builds a Leaflet DivIcon: beehive skep SVG + white count badge on top.
+   * Builds a Leaflet DivIcon matching the reference skep beehive icon:
+   *   - Egg-shaped dome body built from 8 horizontal ellipse bands
+   *   - Bands widen from top, peak at mid-height, then narrow toward base
+   *   - Thin gaps between bands give the coil/ring effect
+   *   - Small filled entrance hole near the base
+   *   - Circular count badge centered at the top of the dome
    *
-   * SVG layout (viewBox 0 0 44 66):
-   *   Badge  cy=9   r=9
-   *   Band 1 cy=23  rx=9   (narrowest)
-   *   Band 2 cy=31  rx=13
-   *   Band 3 cy=39  rx=17
-   *   Band 4 cy=47  rx=20
-   *   Band 5 cy=55  rx=21  (widest)
-   *   Base   cy=61  rx=21  flat dark base
-   *   Hole   cy=55         entry hole
-   *
-   * Each band gets a top-sheen ellipse (white 22% opacity) for the 3-D ring look.
+   * viewBox: 0 0 56 72   iconAnchor: bottom-center
    */
   function buildDivIcon(kind, yard) {
     const c     = KIND_COLORS[kind] ?? KIND_COLORS.default;
     const count = yard?.hive_count ?? 0;
     const label = count > 0 ? String(count) : '?';
-    const fSize = label.length >= 3 ? 6.5 : label.length === 2 ? 8 : 10;
+    const fSize = label.length >= 3 ? 7 : label.length === 2 ? 9 : 11;
 
+    // 8 bands — rx widens then narrows to create the dome silhouette
+    // ry=3.2 with 1px gap between bands (spacing = 7px centre-to-centre)
     const BANDS = [
-      { cy: 23, rx: 9  },
-      { cy: 31, rx: 13 },
-      { cy: 39, rx: 17 },
-      { cy: 47, rx: 20 },
-      { cy: 55, rx: 21 },
+      { cy: 24, rx:  9 },
+      { cy: 31, rx: 15 },
+      { cy: 38, rx: 20 },
+      { cy: 45, rx: 23 },
+      { cy: 52, rx: 23 },   // widest pair
+      { cy: 59, rx: 21 },
+      { cy: 65, rx: 16 },
     ];
 
     const bandsSvg = BANDS.map(({ cy, rx }) =>
-      `<ellipse cx="22" cy="${cy}" rx="${rx}" ry="3.5" fill="${c.fill}" stroke="${c.band}" stroke-width="0.8"/>` +
-      `<ellipse cx="22" cy="${cy - 1.3}" rx="${Math.round(rx * 0.6)}" ry="1.4" fill="rgba(255,255,255,0.22)"/>`
+      // Main band
+      `<ellipse cx="28" cy="${cy}" rx="${rx}" ry="3.2" fill="${c.fill}" stroke="${c.band}" stroke-width="1"/>` +
+      // Top-sheen highlight for the 3-D coil look
+      `<ellipse cx="28" cy="${cy - 1.2}" rx="${Math.round(rx * 0.55)}" ry="1.2" fill="rgba(255,255,255,0.25)"/>`
     ).join('');
 
     const svg =
-      `<svg width="44" height="66" viewBox="0 0 44 66" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">` +
+      `<svg width="56" height="72" viewBox="0 0 56 72" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">` +
+
+      // ── Hive body bands ──────────────────────────────────────────────
       bandsSvg +
-      `<ellipse cx="22" cy="61" rx="21" ry="2.5" fill="${c.band}"/>` +
-      `<ellipse cx="22" cy="55" rx="5"  ry="3"   fill="rgba(0,0,0,0.45)"/>` +
-      `<circle  cx="23" cy="10" r="9"             fill="rgba(0,0,0,0.18)"/>` +
-      `<circle  cx="22" cy="9"  r="9"             fill="white" stroke="${c.badge}" stroke-width="2.5"/>` +
-      `<text x="22" y="13.5" text-anchor="middle"` +
+
+      // ── Flat base line ───────────────────────────────────────────────
+      `<ellipse cx="28" cy="68" rx="16" ry="2" fill="${c.band}"/>` +
+
+      // ── Entrance hole ────────────────────────────────────────────────
+      `<ellipse cx="28" cy="63" rx="4.5" ry="2.8" fill="rgba(0,0,0,0.55)"/>` +
+
+      // ── Badge shadow + badge ─────────────────────────────────────────
+      `<circle cx="29" cy="13" r="12" fill="rgba(0,0,0,0.18)"/>` +
+      `<circle cx="28" cy="12" r="12" fill="white" stroke="${c.badge}" stroke-width="3"/>` +
+
+      // ── Count label ──────────────────────────────────────────────────
+      `<text x="28" y="17" text-anchor="middle"` +
         ` font-family="system-ui,-apple-system,BlinkMacSystemFont,sans-serif"` +
-        ` font-size="${fSize}" font-weight="800" fill="#0f172a">${label}</text>` +
+        ` font-size="${fSize}" font-weight="900" fill="#0f172a">${label}</text>` +
+
       `</svg>`;
 
     return L.divIcon({
       className: '',
       html: `<div class="bl-hive-wrap" role="img" aria-label="Yard: ${label} hives">${svg}</div>`,
-      iconSize:   [44, 66],
-      iconAnchor: [22, 63],
+      iconSize:   [56, 72],
+      iconAnchor: [28, 70],
     });
   }
 
@@ -744,6 +774,74 @@
     val.className = 'text-slate-100 text-sm';
     val.textContent = String(value);
     wrap.append(lbl, val);
+    return wrap;
+  }
+
+  function makeHiveCountRow(yard) {
+    const wrap = document.createElement('div');
+    wrap.className = 'flex flex-col gap-0.5';
+
+    const lbl = document.createElement('span');
+    lbl.className = 'text-[11px] uppercase tracking-widest text-slate-500 font-medium';
+    lbl.textContent = 'Hives';
+
+    const controls = document.createElement('div');
+    controls.className = 'flex items-center gap-1.5';
+
+    const minusBtn = document.createElement('button');
+    minusBtn.type = 'button';
+    minusBtn.textContent = '−';
+    minusBtn.className = 'w-6 h-6 rounded-md bg-slate-700 hover:bg-slate-600 text-slate-200 text-sm font-bold flex items-center justify-center transition select-none';
+
+    const input = document.createElement('input');
+    input.type = 'number';
+    input.min = '0';
+    input.value = yard.hive_count ?? 0;
+    input.className = 'w-16 text-center rounded-md bg-slate-800 border border-slate-600 text-slate-100 text-sm px-1 py-0.5 focus:outline-none focus:border-yellow-500';
+
+    const plusBtn = document.createElement('button');
+    plusBtn.type = 'button';
+    plusBtn.textContent = '+';
+    plusBtn.className = 'w-6 h-6 rounded-md bg-slate-700 hover:bg-slate-600 text-slate-200 text-sm font-bold flex items-center justify-center transition select-none';
+
+    const saveIndicator = document.createElement('span');
+    saveIndicator.className = 'text-[11px] text-slate-500 ml-1';
+
+    controls.append(minusBtn, input, plusBtn, saveIndicator);
+    wrap.append(lbl, controls);
+
+    let saveTimer = null;
+
+    const saveCount = async (val) => {
+      const count = Math.max(0, parseInt(val, 10) || 0);
+      input.value = count;
+      saveIndicator.textContent = 'saving…';
+      clearTimeout(saveTimer);
+      saveTimer = setTimeout(async () => {
+        const { error, count: affected } = await db.from('yards').update({ hive_count: count }, { count: 'exact' }).eq('id', yard.id);
+        console.log('[BeeLinked] hive_count update — error:', error, 'rows affected:', affected);
+        if (error) {
+          saveIndicator.textContent = '✗ error';
+          setStatus('Hive count save failed: ' + error.message, true);
+        } else if (affected === 0) {
+          saveIndicator.textContent = '✗ blocked';
+          setStatus('Hive count blocked by Supabase RLS — run the UPDATE policy SQL', true);
+        } else {
+          saveIndicator.textContent = '✓ saved';
+          setTimeout(() => { saveIndicator.textContent = ''; }, 1500);
+          // Update local cache
+          const m = yardMarkers.get(yard.id);
+          if (m) { m._yard.hive_count = count; upsertMarker(m._yard); }
+          if (_currentModalYard?.id === yard.id) _currentModalYard.hive_count = count;
+        }
+      }, 600);
+    };
+
+    minusBtn.addEventListener('click', () => saveCount((parseInt(input.value, 10) || 0) - 1));
+    plusBtn.addEventListener('click',  () => saveCount((parseInt(input.value, 10) || 0) + 1));
+    input.addEventListener('change',   () => saveCount(input.value));
+    input.addEventListener('keydown', e => { if (e.key === 'Enter') saveCount(input.value); });
+
     return wrap;
   }
 
@@ -981,9 +1079,9 @@
     grid.innerHTML = '';
     const apiaryName = yard.apiaries?.name ?? null;
     grid.append(
-      makeInfoRow('Hives',     yard.hive_count ?? '—'),
+      makeHiveCountRow(yard),
       makeInfoRow('Last Seen', fmt(yard.last_seen_at)),
-      makeInfoRow('Status',    yard.status ?? 'active'),
+      makeInfoRow('Status',    meta.text),
       makeCoordRow(yard),
     );
     if (apiaryName) grid.append(makeInfoRow('Apiary', apiaryName));
@@ -1040,6 +1138,7 @@
               };
             }
             upsertMarker(m._yard);
+            syncYardStatus(_currentModalYard.id);
           }
         }
         // Rebuild Today's widget so status badge reflects the change
@@ -1049,9 +1148,315 @@
       sorted.forEach((a) => actionsList.append(makeActionItem(a, onDeleted)));
     }
 
+    // ── Yard Signals section ─────────────────────────────────────────
+    buildSignalsSection(yard);
+
     modalEl.classList.remove('hidden');
     document.body.style.overflow = 'hidden';
     modalClose.focus();
+  }
+
+  /* ── Yard Signals ────────────────────────────────────────────────── */
+  const SIGNAL_TYPES = [
+    'Varroa mite infestation',
+    'Queenless colony',
+    'Disease detected',
+    'Low population',
+    'Aggressive behavior',
+    'Starvation risk',
+    'Swarming',
+    'Equipment damage',
+    'Unusual mortality',
+    'Other',
+  ];
+
+  async function buildSignalsSection(yard) {
+    const wrap = document.getElementById('modalSignalsWrap');
+    if (!wrap) return;
+    wrap.innerHTML = '<p class="text-xs text-slate-600">Loading signals…</p>';
+
+    // Fetch active signals directly – independent of main yard query
+    const { data: rawSignals, error: sigErr } = await db
+      .from('yard_signals')
+      .select('*')
+      .eq('yard_id', yard.id)
+      
+      .order('created_at', { ascending: false });
+
+    if (sigErr) {
+      console.error('[BeeLinked] yard_signals error:', sigErr);
+      wrap.innerHTML = `<p class="text-xs text-red-500">Signals error (${sigErr.code}): ${sigErr.message}</p>`;
+      return;
+    }
+
+    wrap.innerHTML = '';
+    const signals = (rawSignals ?? []).filter(s => s.is_active);
+
+    // ── Section header ──────────────────────────────────────────────
+    const header = document.createElement('div');
+    header.className = 'flex items-center justify-between mb-2';
+    header.innerHTML = `
+      <span class="text-[11px] uppercase tracking-widest text-slate-500 font-medium flex items-center gap-1.5">
+        <svg class="w-3 h-3 text-red-400" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z"/>
+        </svg>
+        Yard Signals
+        ${signals.length ? `<span class="ml-1 px-1.5 py-0.5 rounded-full bg-red-900/50 text-red-300 text-[10px] font-bold">${signals.length}</span>` : ''}
+      </span>
+    `;
+    wrap.appendChild(header);
+
+    // ── Existing signals list ───────────────────────────────────────
+    if (signals.length) {
+      const list = document.createElement('div');
+      list.className = 'flex flex-col gap-2 mb-3';
+      signals.forEach(sig => {
+        const item = document.createElement('div');
+        item.className = 'flex items-start gap-2 rounded-lg bg-red-950/40 border border-red-800/40 px-3 py-2';
+        item.innerHTML = `
+          <svg class="w-3.5 h-3.5 text-red-400 shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
+            <path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/>
+          </svg>
+          <div class="flex-1 min-w-0">
+            <p class="text-xs font-semibold text-red-300">${sig.signal_type}</p>
+            ${sig.notes ? `<p class="text-[11px] text-slate-400 mt-0.5">${sig.notes}</p>` : ''}
+            <p class="text-[10px] text-slate-600 mt-0.5">${new Date(sig.created_at).toLocaleDateString(undefined,{day:'2-digit',month:'short',year:'numeric'})}</p>
+          </div>
+          <button class="sig-delete-btn shrink-0 p-1 rounded text-slate-500 hover:text-red-400 hover:bg-red-900/20 transition" data-sig-id="${sig.id}" title="Resolve signal">
+            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/>
+            </svg>
+          </button>
+        `;
+        list.appendChild(item);
+      });
+      wrap.appendChild(list);
+    } else {
+      const none = document.createElement('p');
+      none.className = 'text-xs text-slate-600 mb-3';
+      none.textContent = 'No active signals';
+      wrap.appendChild(none);
+    }
+
+    // ── Add new signal form ─────────────────────────────────────────
+    const addBtn = document.createElement('button');
+    addBtn.type = 'button';
+    addBtn.className = 'w-full flex items-center justify-center gap-1.5 rounded-lg border border-dashed border-slate-600 text-xs text-slate-500 hover:border-red-600 hover:text-red-400 py-2 transition';
+    addBtn.innerHTML = `<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/></svg> Add Signal`;
+
+    const addForm = document.createElement('div');
+    addForm.className = 'hidden mt-2 flex flex-col gap-2';
+
+    const select = document.createElement('select');
+    select.className = 'w-full rounded-lg bg-slate-800 border border-slate-600 text-slate-200 text-xs px-2 py-1.5 focus:outline-none focus:border-red-500';
+    select.innerHTML = `<option value="">— Choose signal type —</option>` +
+      SIGNAL_TYPES.map(t => `<option value="${t}">${t}</option>`).join('');
+
+    const noteIn = document.createElement('textarea');
+    noteIn.placeholder = 'Add a note (optional)';
+    noteIn.rows = 2;
+    noteIn.className = 'w-full rounded-lg bg-slate-800 border border-slate-600 text-slate-200 text-xs px-2 py-1.5 resize-none focus:outline-none focus:border-red-500 placeholder-slate-600';
+
+    const saveRow = document.createElement('div');
+    saveRow.className = 'flex gap-2';
+
+    const saveBtn = document.createElement('button');
+    saveBtn.type = 'button';
+    saveBtn.textContent = 'Save Signal';
+    saveBtn.className = 'flex-1 rounded-lg bg-red-900/60 border border-red-700 text-red-200 text-xs font-semibold py-1.5 hover:bg-red-800/60 transition';
+
+    const cancelBtn = document.createElement('button');
+    cancelBtn.type = 'button';
+    cancelBtn.textContent = 'Cancel';
+    cancelBtn.className = 'px-3 rounded-lg bg-slate-800 border border-slate-700 text-slate-400 text-xs py-1.5 hover:bg-slate-700 transition';
+
+    saveRow.append(saveBtn, cancelBtn);
+    addForm.append(select, noteIn, saveRow);
+
+    addBtn.addEventListener('click', () => {
+      addBtn.classList.add('hidden');
+      addForm.classList.remove('hidden');
+      select.focus();
+    });
+    cancelBtn.addEventListener('click', () => {
+      addForm.classList.add('hidden');
+      addBtn.classList.remove('hidden');
+    });
+
+    saveBtn.addEventListener('click', async () => {
+      if (!select.value) { select.focus(); return; }
+      saveBtn.disabled = true;
+      saveBtn.textContent = 'Saving…';
+
+      const { error } = await db.from('yard_signals').insert({
+        yard_id:     yard.id,
+        signal_type: select.value,
+        is_active:   true,
+        notes:       noteIn.value.trim() || null,
+      });
+
+      if (error) {
+        setStatus('Signal save failed: ' + error.message, true);
+        saveBtn.disabled = false;
+        saveBtn.textContent = 'Save Signal';
+        return;
+      }
+
+      setStatus('Signal added');
+      // Refresh yard and rebuild modal section
+      await refreshYardSignals(yard.id);
+    });
+
+    wrap.append(addBtn, addForm);
+  }
+
+  // ── Delete (resolve) button delegation — set up ONCE globally ──────
+  document.getElementById('modalSignalsWrap').addEventListener('click', (e) => {
+    const btn = e.target.closest('.sig-delete-btn');
+    if (!btn || !_currentModalYard) return;
+    showSignalResolveDialog(btn.dataset.sigId, _currentModalYard.id);
+  });
+
+  async function refreshYardSignals(yardId) {
+    // Update the active-signals cache for this yard
+    const { data: sigs } = await db
+      .from('yard_signals')
+      .select('id, is_active')
+      .eq('yard_id', yardId);
+    const hasActive = (sigs ?? []).some(s => s.is_active);
+    if (hasActive) {
+      _activeSignalYardIds.add(yardId);
+    } else {
+      _activeSignalYardIds.delete(yardId);
+    }
+
+    // Re-render the marker so its colour reflects the updated signal state
+    const m = yardMarkers.get(yardId);
+    if (m) upsertMarker(m._yard);
+    syncYardStatus(yardId);
+
+    // Update the modal badge/kind tag if this yard's modal is open
+    if (_currentModalYard?.id === yardId) {
+      refreshModalBadge(_currentModalYard);
+      buildSignalsSection(_currentModalYard);
+    }
+  }
+
+  /** Re-renders the status badge and STATUS info row inside the open yard modal */
+  function refreshModalBadge(yard) {
+    const kind  = resolveMarkerKind(yard);
+    const meta  = KIND_META[kind] ?? KIND_META.placed;
+
+    const badge = document.getElementById('modalBadge');
+    if (badge) {
+      badge.className   = `inline-flex items-center text-xs font-semibold px-2.5 py-1 rounded-full ${meta.css}`;
+      badge.textContent = meta.text;
+    }
+
+    // Also update the STATUS row in the info grid
+    const grid = document.getElementById('modalInfo');
+    if (grid) {
+      const statusRow = [...grid.querySelectorAll('span')].find(s => s.textContent === 'STATUS');
+      if (statusRow) {
+        const valEl = statusRow.closest('div')?.querySelector('span:last-child');
+        if (valEl) valEl.textContent = meta.text;
+      }
+    }
+  }
+
+  /** Write the derived status back to Supabase so the DB stays in sync */
+  async function syncYardStatus(yardId) {
+    const m = yardMarkers.get(yardId);
+    if (!m) return;
+    const kind      = resolveMarkerKind(m._yard);
+    const newStatus = KIND_TO_STATUS[kind] ?? 'placed';
+    if (m._yard.status === newStatus) return; // nothing changed
+    const { error } = await db.from('yards').update({ status: newStatus }).eq('id', yardId);
+    if (!error) m._yard.status = newStatus;
+  }
+
+  /** Load all active signals once and populate the cache (called after loadYards) */
+  async function loadAllSignals() {
+    const { data, error } = await db
+      .from('yard_signals')
+      .select('yard_id, is_active');
+    if (error || !data) return; // table may not exist yet — silently skip
+    _activeSignalYardIds.clear();
+    data.filter(s => s.is_active).forEach(s => _activeSignalYardIds.add(s.yard_id));
+    // Re-render all markers now that we have signal data
+    yardMarkers.forEach(m => upsertMarker(m._yard));
+  }
+
+  function showSignalResolveDialog(sigId, yardId) {
+    // Remove any existing dialog
+    document.getElementById('sigResolveDialog')?.remove();
+
+    const overlay = document.createElement('div');
+    overlay.id = 'sigResolveDialog';
+    overlay.className = 'fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4';
+
+    overlay.innerHTML = `
+      <div class="w-full max-w-sm rounded-2xl bg-[#141d2b] border border-slate-700 shadow-2xl p-5 flex flex-col gap-4" id="sigDialogBox">
+        <!-- Step 1: Confirm -->
+        <div id="sigStep1">
+          <p class="text-sm font-semibold text-white mb-1">Resolve this signal?</p>
+          <p class="text-xs text-slate-400 mb-4">This will mark the signal as resolved and remove it from the yard.</p>
+          <div class="flex gap-2">
+            <button id="sigConfirmYes" class="flex-1 rounded-lg bg-red-900/60 border border-red-700 text-red-200 text-sm font-semibold py-2 hover:bg-red-800/60 transition">Yes, Resolve</button>
+            <button id="sigConfirmNo"  class="flex-1 rounded-lg bg-slate-800 border border-slate-700 text-slate-300 text-sm py-2 hover:bg-slate-700 transition">Cancel</button>
+          </div>
+        </div>
+        <!-- Step 2: Resolution note -->
+        <div id="sigStep2" class="hidden">
+          <p class="text-sm font-semibold text-white mb-1">How was it fixed?</p>
+          <p class="text-xs text-slate-400 mb-2">Add a note explaining how the issue was resolved (optional).</p>
+          <textarea id="sigResolutionNote" rows="3" placeholder="e.g. Treated with oxalic acid…"
+            class="w-full rounded-lg bg-slate-800 border border-slate-600 text-slate-200 text-xs px-3 py-2 resize-none focus:outline-none focus:border-emerald-500 placeholder-slate-600 mb-3"></textarea>
+          <div class="flex gap-2">
+            <button id="sigSaveResolution" class="flex-1 rounded-lg bg-emerald-900/60 border border-emerald-700 text-emerald-200 text-sm font-semibold py-2 hover:bg-emerald-800/60 transition">Save & Close</button>
+            <button id="sigSkipResolution" class="px-4 rounded-lg bg-slate-800 border border-slate-700 text-slate-400 text-sm py-2 hover:bg-slate-700 transition">Skip</button>
+          </div>
+        </div>
+      </div>
+    `;
+
+    document.body.appendChild(overlay);
+
+    overlay.querySelector('#sigConfirmNo').addEventListener('click',  () => overlay.remove());
+    overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
+
+    overlay.querySelector('#sigConfirmYes').addEventListener('click', () => {
+      overlay.querySelector('#sigStep1').classList.add('hidden');
+      overlay.querySelector('#sigStep2').classList.remove('hidden');
+      overlay.querySelector('#sigResolutionNote').focus();
+    });
+
+    const doResolve = async (note) => {
+      overlay.querySelector('#sigSaveResolution').disabled = true;
+      overlay.querySelector('#sigSaveResolution').textContent = 'Saving…';
+
+      const { error } = await db.from('yard_signals').update({
+        is_active:       false,
+        resolution_note: note || null,
+        resolved_at:     new Date().toISOString(),
+      }).eq('id', sigId);
+
+      if (error) {
+        setStatus('Resolve failed: ' + error.message, true);
+        overlay.remove();
+        return;
+      }
+      setStatus('Signal resolved');
+      overlay.remove();
+      await refreshYardSignals(yardId);
+    };
+
+    overlay.querySelector('#sigSaveResolution').addEventListener('click', () => {
+      doResolve(overlay.querySelector('#sigResolutionNote').value.trim());
+    });
+    overlay.querySelector('#sigSkipResolution').addEventListener('click', () => {
+      doResolve('');
+    });
   }
 
   function closeModal() {
@@ -1177,6 +1582,7 @@
     rows.forEach((yard) => upsertMarker(yard));
     applyMapApiaryFilter();
     buildTodayWidget(rows);
+    loadAllSignals(); // async, re-renders markers once signals are fetched
 
     setStatus(`${rows.length} yard${rows.length === 1 ? '' : 's'} loaded`);
 
@@ -1512,14 +1918,27 @@
       return;
     }
 
-    // Reload this yard so the marker colour reflects the new action
-    const { data: refreshed } = await db
+    // Reload this yard so the marker colour and modal reflect the new action
+    const { data: refreshed, error: fetchErr } = await db
       .from('yards')
       .select('*, actions(*), apiaries(id, name)')
       .eq('id', yardId)
       .single();
 
-    if (refreshed) upsertMarker(refreshed);
+    if (fetchErr) console.warn('[BeeLinked] yard refresh after action save:', fetchErr.message);
+
+    const updatedYard = refreshed ?? yardMarkers.get(yardId)?._yard;
+    if (updatedYard) {
+      upsertMarker(updatedYard);
+      syncYardStatus(yardId);
+      // If yard modal is open for this yard, refresh it too
+      if (_currentModalYard?.id === yardId) {
+        _currentModalYard = updatedYard;
+        openModal(updatedYard);
+      }
+      // Rebuild today's widget
+      buildTodayWidget([...yardMarkers.values()].map(m => m._yard));
+    }
 
     const yardName = yardMarkers.get(yardId)?._yard?.name ?? 'yard';
     closeNewActionModal();
@@ -2298,7 +2717,6 @@
   function openEditYardModal(yard) {
     document.getElementById('editYardName').value      = yard.name ?? '';
     document.getElementById('editYardHiveCount').value = yard.hive_count ?? 0;
-    document.getElementById('editYardStatus').value    = yard.status ?? 'active';
     document.getElementById('editYardLocation').value  = yard.location ?? '';
     document.getElementById('editYardNotes').value     = yard.notes ?? '';
     document.getElementById('editYardError').classList.add('hidden');
@@ -2314,6 +2732,68 @@
   document.getElementById('modalEditBtn').addEventListener('click', () => {
     if (_currentModalYard) openEditYardModal(_currentModalYard);
   });
+
+  document.getElementById('modalDeleteYardBtn').addEventListener('click', () => {
+    if (!_currentModalYard) return;
+    showDeleteYardConfirm(_currentModalYard);
+  });
+
+  function showDeleteYardConfirm(yard) {
+    document.getElementById('deleteYardDialog')?.remove();
+
+    const overlay = document.createElement('div');
+    overlay.id = 'deleteYardDialog';
+    overlay.className = 'fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4';
+    overlay.innerHTML = `
+      <div class="w-full max-w-sm rounded-2xl bg-[#141d2b] border border-slate-700 shadow-2xl p-6 flex flex-col gap-4">
+        <div class="flex items-center gap-3">
+          <div class="shrink-0 w-10 h-10 rounded-full bg-red-950/60 border border-red-800/50 flex items-center justify-center">
+            <svg class="w-5 h-5 text-red-400" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+            </svg>
+          </div>
+          <div>
+            <p class="text-sm font-bold text-white">Delete Yard</p>
+            <p class="text-xs text-slate-400 mt-0.5">This cannot be undone.</p>
+          </div>
+        </div>
+        <p class="text-sm text-slate-300">Are you sure you want to delete <span class="font-semibold text-white">${yard.name}</span>? All actions and signals for this yard will also be deleted.</p>
+        <div class="flex gap-2 mt-1">
+          <button id="deleteYardConfirmBtn" class="flex-1 rounded-lg bg-red-900/60 border border-red-700 text-red-200 text-sm font-semibold py-2.5 hover:bg-red-800/60 transition">Yes, Delete</button>
+          <button id="deleteYardCancelBtn" class="flex-1 rounded-lg bg-slate-800 border border-slate-700 text-slate-300 text-sm py-2.5 hover:bg-slate-700 transition">Cancel</button>
+        </div>
+      </div>
+    `;
+
+    document.body.appendChild(overlay);
+
+    overlay.querySelector('#deleteYardCancelBtn').addEventListener('click', () => overlay.remove());
+    overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
+
+    overlay.querySelector('#deleteYardConfirmBtn').addEventListener('click', async () => {
+      const btn = overlay.querySelector('#deleteYardConfirmBtn');
+      btn.disabled = true;
+      btn.textContent = 'Deleting…';
+
+      const { error } = await db.from('yards').delete().eq('id', yard.id);
+
+      if (error) {
+        setStatus('Delete failed: ' + error.message, true);
+        overlay.remove();
+        return;
+      }
+
+      // Remove marker from map and cache
+      const m = yardMarkers.get(yard.id);
+      if (m) { map.removeLayer(m); yardMarkers.delete(yard.id); }
+      _activeSignalYardIds.delete(yard.id);
+
+      overlay.remove();
+      closeModal();
+      setStatus(`"${yard.name}" deleted`);
+      buildTodayWidget([...yardMarkers.values()].map(m => m._yard));
+    });
+  }
 
   document.getElementById('modalAddActionBtn').addEventListener('click', () => {
     if (!_currentModalYard) return;
@@ -2371,7 +2851,7 @@
   document.getElementById('editYardSaveBtn').addEventListener('click', async () => {
     const name      = document.getElementById('editYardName').value.trim();
     const hiveCount = parseInt(document.getElementById('editYardHiveCount').value, 10) || 0;
-    const status    = document.getElementById('editYardStatus').value;
+    const status    = _currentModalYard.status; // auto-managed, not editable
     const location  = document.getElementById('editYardLocation').value.trim() || null;
     const notes     = document.getElementById('editYardNotes').value.trim() || null;
     const apiaryId  = document.getElementById('editYardApiary').value || null;
