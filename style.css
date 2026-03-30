@@ -198,7 +198,9 @@ input, select, textarea {
 .scrollbar-hide::-webkit-scrollbar { display: none; }
 
 .apiary-filter-btn {
-  background: transparent;
+  -webkit-appearance: none;
+  appearance: none;
+  background: #0f1929;
   border-color: #334155;
   color: #94a3b8;
   cursor: pointer;

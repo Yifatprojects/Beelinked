@@ -363,6 +363,20 @@
     const empty = document.getElementById('todayEmpty');
     if (!list || !empty) return;
 
+    // Set scroll behaviour: free-height for ≤6 items, capped + scrollable for >6
+    const body = document.getElementById('todayBody');
+    if (body) {
+      const ITEM_H = 40; // approximate px per item (py-2.5 + text)
+      const maxItems = 6;
+      if (items.length > maxItems) {
+        body.style.maxHeight = (ITEM_H * maxItems) + 'px';
+        body.style.overflowY = 'auto';
+      } else {
+        body.style.maxHeight = '';
+        body.style.overflowY = '';
+      }
+    }
+
     list.innerHTML = '';
     if (items.length === 0) {
       list.classList.add('hidden');
@@ -1534,18 +1548,17 @@
   }
 
   function buildApiaryFilterBar() {
-    const bar = document.getElementById('apiaryFilterBar');
-    if (!bar) return;
+    const pills = document.getElementById('apiaryFilterPills');
+    if (!pills) return;
 
-    // Keep the "All" button, remove the rest
-    bar.innerHTML = '';
+    pills.innerHTML = '';
 
     const allBtn = document.createElement('button');
     allBtn.dataset.apiaryFilter = 'all';
     allBtn.className = 'apiary-filter-btn shrink-0 px-3 py-1 rounded-full text-xs font-semibold border transition whitespace-nowrap' +
       (_mapApiaryFilter === 'all' ? ' active' : '');
     allBtn.textContent = 'All Apiaries';
-    bar.appendChild(allBtn);
+    pills.appendChild(allBtn);
 
     _apiaries.forEach(({ id, name }) => {
       const btn = document.createElement('button');
@@ -1553,20 +1566,143 @@
       btn.className = 'apiary-filter-btn shrink-0 px-3 py-1 rounded-full text-xs font-semibold border transition whitespace-nowrap' +
         (String(id) === _mapApiaryFilter ? ' active' : '');
       btn.textContent = name;
-      bar.appendChild(btn);
+      pills.appendChild(btn);
     });
 
-    // Single delegated listener
-    bar.onclick = (e) => {
+    pills.onclick = (e) => {
       const btn = e.target.closest('[data-apiary-filter]');
       if (!btn) return;
       _mapApiaryFilter = btn.dataset.apiaryFilter;
-      bar.querySelectorAll('.apiary-filter-btn').forEach(b =>
+      pills.querySelectorAll('.apiary-filter-btn').forEach(b =>
         b.classList.toggle('active', b.dataset.apiaryFilter === _mapApiaryFilter)
       );
       applyMapApiaryFilter();
+      window._refreshApiaryToggle?.();
     };
   }
+
+  // Collapse / expand apiary filter pills
+  (function setupApiaryFilterToggle() {
+    const toggle  = document.getElementById('apiaryFilterToggle');
+    const pills   = document.getElementById('apiaryFilterPills');
+    const chevron = document.getElementById('apiaryFilterChevron');
+    if (!toggle || !pills || !chevron) return;
+
+    let collapsed = localStorage.getItem('bl_apiary_filter_collapsed') === '1';
+
+    const apply = () => {
+      const hasFilter = _mapApiaryFilter !== 'all';
+      pills.classList.toggle('hidden', collapsed);
+      chevron.style.transform = collapsed ? 'rotate(180deg)' : '';
+      toggle.title = collapsed ? 'Show apiary filter' : 'Hide apiary filter';
+      localStorage.setItem('bl_apiary_filter_collapsed', collapsed ? '1' : '0');
+
+      // Yellow outline when collapsed + active filter
+      if (collapsed && hasFilter) {
+        toggle.style.border      = '1.5px solid #eab308';
+        toggle.style.color       = '#fde047';
+        toggle.style.borderRadius= '9999px';
+        toggle.style.boxShadow   = '0 0 0 2px rgba(234,179,8,0.25)';
+      } else {
+        toggle.style.border      = '';
+        toggle.style.color       = '';
+        toggle.style.borderRadius= '';
+        toggle.style.boxShadow   = '';
+      }
+    };
+    apply();
+
+    // Expose so filter clicks can also refresh the indicator
+    window._refreshApiaryToggle = apply;
+
+    toggle.addEventListener('click', () => {
+      collapsed = !collapsed;
+      apply();
+    });
+  })();
+
+  // Drag-to-reposition apiary filter bar
+  (function setupApiaryFilterDrag() {
+    const bar    = document.getElementById('apiaryFilterBar');
+    const handle = document.getElementById('apiaryFilterHandle');
+    if (!bar || !handle) return;
+
+    // Restore saved position
+    const saved = localStorage.getItem('bl_apiary_filter_pos');
+    if (saved) {
+      try {
+        const { top, left } = JSON.parse(saved);
+        bar.style.top       = top;
+        bar.style.left      = left;
+        bar.style.transform = 'none';
+      } catch {}
+    }
+
+    let dragging = false, startX = 0, startY = 0, origLeft = 0, origTop = 0;
+
+    const onMove = (cx, cy) => {
+      if (!dragging) return;
+      const parent = bar.parentElement.getBoundingClientRect();
+      let newLeft = origLeft + (cx - startX);
+      let newTop  = origTop  + (cy - startY);
+      // Clamp inside the map container
+      newLeft = Math.max(0, Math.min(newLeft, parent.width  - bar.offsetWidth));
+      newTop  = Math.max(0, Math.min(newTop,  parent.height - bar.offsetHeight));
+      bar.style.left      = newLeft + 'px';
+      bar.style.top       = newTop  + 'px';
+      bar.style.transform = 'none';
+    };
+
+    const stopDrag = () => {
+      if (!dragging) return;
+      dragging = false;
+      handle.style.cursor = 'grab';
+      localStorage.setItem('bl_apiary_filter_pos', JSON.stringify({
+        top:  bar.style.top,
+        left: bar.style.left,
+      }));
+      window.removeEventListener('mousemove', onMouseMove);
+      window.removeEventListener('mouseup',   stopDrag);
+      window.removeEventListener('touchmove', onTouchMove);
+      window.removeEventListener('touchend',  stopDrag);
+    };
+
+    const onMouseMove = (e) => onMove(e.clientX, e.clientY);
+    const onTouchMove = (e) => { e.preventDefault(); onMove(e.touches[0].clientX, e.touches[0].clientY); };
+
+    handle.addEventListener('mousedown', (e) => {
+      e.preventDefault();
+      dragging  = true;
+      startX    = e.clientX;
+      startY    = e.clientY;
+      const r   = bar.getBoundingClientRect();
+      const pr  = bar.parentElement.getBoundingClientRect();
+      origLeft  = r.left - pr.left;
+      origTop   = r.top  - pr.top;
+      bar.style.left      = origLeft + 'px';
+      bar.style.top       = origTop  + 'px';
+      bar.style.transform = 'none';
+      handle.style.cursor = 'grabbing';
+      window.addEventListener('mousemove', onMouseMove);
+      window.addEventListener('mouseup',   stopDrag);
+    });
+
+    handle.addEventListener('touchstart', (e) => {
+      e.preventDefault();
+      dragging  = true;
+      startX    = e.touches[0].clientX;
+      startY    = e.touches[0].clientY;
+      const r   = bar.getBoundingClientRect();
+      const pr  = bar.parentElement.getBoundingClientRect();
+      origLeft  = r.left - pr.left;
+      origTop   = r.top  - pr.top;
+      bar.style.left      = origLeft + 'px';
+      bar.style.top       = origTop  + 'px';
+      bar.style.transform = 'none';
+      window.addEventListener('touchmove', onTouchMove, { passive: false });
+      window.addEventListener('touchend',  stopDrag);
+    }, { passive: false });
+  })();
 
   function applyMapApiaryFilter() {
     yardMarkers.forEach((marker, yardId) => {
@@ -2944,6 +3080,218 @@
   document.getElementById('editYardClose').addEventListener('click', closeEditYardModal);
   document.getElementById('editYardModal').addEventListener('click', (e) => {
     if (e.target.id === 'editYardModal') closeEditYardModal();
+  });
+
+  /* ── AI Chat Agent ──────────────────────────────────────────────── */
+  const chatPanel      = document.getElementById('chatPanel');
+  const chatMessages   = document.getElementById('chatMessages');
+  const chatInput      = document.getElementById('chatInput');
+  const chatSetup      = document.getElementById('chatSetup');
+  const chatApiKeyInput= document.getElementById('chatApiKeyInput');
+
+  let _chatOpen = false;
+
+  function getChatApiKey() {
+    return localStorage.getItem('bl_openai_key') ?? '';
+  }
+
+  function buildYardContext() {
+    const yards = [...yardMarkers.values()].map(m => m._yard);
+    if (!yards.length) return 'No yards loaded yet.';
+
+    return yards.map(y => {
+      const kind     = resolveMarkerKind(y);
+      const status   = KIND_META[kind]?.text ?? kind;
+      const actions  = (y.actions ?? []).map(a => {
+        const s = getActionStatus(a);
+        return `    - ${a.action_type ?? a.title ?? 'Action'} on ${a.action_date ?? 'no date'} [${s}]`;
+      }).join('\n') || '    (none)';
+      const signals  = _activeSignalYardIds.has(y.id) ? 'Yes (active signals)' : 'None';
+      const apiary   = y.apiaries?.name ?? 'Unassigned';
+      return `Yard: ${y.name}
+  Apiary: ${apiary}
+  Hives: ${y.hive_count ?? 0}
+  Status: ${status}
+  Lat/Lng: ${y.lat}, ${y.lng}
+  Active Signals: ${signals}
+  Actions:\n${actions}`;
+    }).join('\n\n');
+  }
+
+  function parseChatResponse(text) {
+    // Convert [[YardName]] to clickable map links
+    return text.replace(/\[\[(.+?)\]\]/g, (_, name) => {
+      return `<a href="#" class="chat-yard-link font-semibold text-amber-400 underline hover:text-amber-300 transition" data-yard-name="${name}">${name}</a>`;
+    });
+  }
+
+  function appendMessage(role, html) {
+    const wrap = document.createElement('div');
+    wrap.className = role === 'user'
+      ? 'flex justify-end'
+      : 'flex gap-2.5';
+
+    if (role === 'assistant') {
+      const avatar = document.createElement('div');
+      avatar.className = 'w-6 h-6 rounded-full bg-amber-500/20 border border-amber-500/30 flex items-center justify-center shrink-0 mt-0.5';
+      avatar.innerHTML = '<span class="text-amber-400 text-[10px]">🐝</span>';
+      wrap.appendChild(avatar);
+    }
+
+    const bubble = document.createElement('div');
+    bubble.className = role === 'user'
+      ? 'bg-amber-500/20 border border-amber-600/30 rounded-2xl rounded-tr-sm px-3 py-2 text-xs text-amber-100 max-w-[85%]'
+      : 'bg-slate-800/80 rounded-2xl rounded-tl-sm px-3 py-2 text-xs text-slate-300 max-w-[85%] leading-relaxed';
+    bubble.innerHTML = html;
+    wrap.appendChild(bubble);
+    chatMessages.appendChild(wrap);
+    chatMessages.scrollTop = chatMessages.scrollHeight;
+    return bubble;
+  }
+
+  function appendTyping() {
+    const wrap = document.createElement('div');
+    wrap.className = 'flex gap-2.5';
+    wrap.id = 'chatTyping';
+    wrap.innerHTML = `
+      <div class="w-6 h-6 rounded-full bg-amber-500/20 border border-amber-500/30 flex items-center justify-center shrink-0 mt-0.5">
+        <span class="text-amber-400 text-[10px]">🐝</span>
+      </div>
+      <div class="bg-slate-800/80 rounded-2xl rounded-tl-sm px-3 py-2.5">
+        <span class="flex gap-1">
+          <span class="w-1.5 h-1.5 rounded-full bg-slate-500 animate-bounce" style="animation-delay:0ms"></span>
+          <span class="w-1.5 h-1.5 rounded-full bg-slate-500 animate-bounce" style="animation-delay:150ms"></span>
+          <span class="w-1.5 h-1.5 rounded-full bg-slate-500 animate-bounce" style="animation-delay:300ms"></span>
+        </span>
+      </div>`;
+    chatMessages.appendChild(wrap);
+    chatMessages.scrollTop = chatMessages.scrollHeight;
+  }
+
+  async function sendChatMessage(userText) {
+    const key = getChatApiKey();
+    if (!key) {
+      chatSetup.classList.remove('hidden');
+      chatSetup.querySelector('input').focus();
+      return;
+    }
+
+    appendMessage('user', userText);
+    appendTyping();
+    chatInput.value = '';
+    chatInput.disabled = true;
+
+    const systemPrompt = `You are BeeLinked Assistant, an AI helper for a beehive field management app.
+You have live access to the user's yard data below. Answer questions about yards, apiaries, hives, actions, and signals.
+When referring to a specific yard by name, wrap it like [[Yard Name]] so it becomes a clickable map link.
+Be concise. Use bullet points for lists. Today's date: ${new Date().toLocaleDateString()}.
+
+CURRENT YARD DATA:
+${buildYardContext()}`;
+
+    try {
+      const res = await fetch('https://api.openai.com/v1/chat/completions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${key}` },
+        body: JSON.stringify({
+          model: 'gpt-4o-mini',
+          messages: [
+            { role: 'system', content: systemPrompt },
+            { role: 'user',   content: userText },
+          ],
+          max_tokens: 500,
+          temperature: 0.4,
+        }),
+      });
+
+      document.getElementById('chatTyping')?.remove();
+
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        const msg = err?.error?.message ?? `API error ${res.status}`;
+        if (res.status === 401) {
+          appendMessage('assistant', '⚠️ Invalid API key. Please update it using the ⚙️ button.');
+          chatSetup.classList.remove('hidden');
+        } else {
+          appendMessage('assistant', `⚠️ ${msg}`);
+        }
+        return;
+      }
+
+      const data = await res.json();
+      const reply = data.choices?.[0]?.message?.content ?? '(no response)';
+      const parsed = parseChatResponse(reply.replace(/\n/g, '<br>'));
+      appendMessage('assistant', parsed);
+
+    } catch (e) {
+      document.getElementById('chatTyping')?.remove();
+      appendMessage('assistant', '⚠️ Network error. Check your connection.');
+    } finally {
+      chatInput.disabled = false;
+      chatInput.focus();
+    }
+  }
+
+  // Open / close
+  document.getElementById('chatAgentBtn').addEventListener('click', () => {
+    _chatOpen = !_chatOpen;
+    chatPanel.classList.toggle('hidden', !_chatOpen);
+    if (_chatOpen) {
+      if (!getChatApiKey()) chatSetup.classList.remove('hidden');
+      chatInput.focus();
+    }
+  });
+
+  document.getElementById('chatClose').addEventListener('click', () => {
+    _chatOpen = false;
+    chatPanel.classList.add('hidden');
+  });
+
+  // Settings toggle
+  document.getElementById('chatSettingsBtn').addEventListener('click', () => {
+    chatSetup.classList.toggle('hidden');
+    if (!chatSetup.classList.contains('hidden')) chatApiKeyInput.focus();
+  });
+
+  // Save API key
+  document.getElementById('chatApiKeySave').addEventListener('click', () => {
+    const key = chatApiKeyInput.value.trim();
+    if (!key) return;
+    localStorage.setItem('bl_openai_key', key);
+    chatApiKeyInput.value = '';
+    chatSetup.classList.add('hidden');
+    appendMessage('assistant', '✅ API key saved! Ask me anything about your yards.');
+  });
+
+  // Send on button click or Enter
+  document.getElementById('chatSendBtn').addEventListener('click', () => {
+    const txt = chatInput.value.trim();
+    if (txt) sendChatMessage(txt);
+  });
+
+  chatInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      const txt = chatInput.value.trim();
+      if (txt) sendChatMessage(txt);
+    }
+  });
+
+  // Yard link clicks — navigate map to that yard
+  chatMessages.addEventListener('click', (e) => {
+    const link = e.target.closest('.chat-yard-link');
+    if (!link) return;
+    e.preventDefault();
+    const name = link.dataset.yardName?.toLowerCase();
+    const match = [...yardMarkers.values()].find(m =>
+      (m._yard.name ?? '').toLowerCase() === name
+    );
+    if (match) {
+      _chatOpen = false;
+      chatPanel.classList.add('hidden');
+      map.setView(match.getLatLng(), Math.max(map.getZoom(), 15), { animate: true });
+      setTimeout(() => handleMarkerClick(match._yard), 400);
+    }
   });
 
 })();

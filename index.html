@@ -73,6 +73,15 @@
           </svg>
         </button>
 
+        <!-- AI Assistant -->
+        <button id="chatAgentBtn" type="button" title="BeeLinked Assistant"
+          class="p-2 rounded-lg border border-hive-border bg-hive-bg/60 text-amber-400 hover:text-amber-300 hover:bg-hive-card active:scale-95 transition"
+          aria-label="Open AI assistant">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z"/>
+          </svg>
+        </button>
+
         <!-- Legend toggle -->
         <button
           id="legendToggle"
@@ -93,14 +102,31 @@
     <div class="relative flex-1 min-h-0">
       <div id="map" role="application" aria-label="Beehive yards map"></div>
 
-      <!-- Apiary filter bar (floating) -->
+      <!-- Apiary filter bar (floating, draggable) -->
       <div id="apiaryFilterBar"
-        class="absolute top-14 sm:top-3 left-1/2 z-[900] flex items-center gap-2 px-3 py-2 rounded-2xl border border-slate-700/80 bg-[#0f172a]/90 backdrop-blur-sm shadow-2xl overflow-x-auto scrollbar-hide"
-        style="transform:translateX(-50%); max-width:calc(100vw - 2rem); min-height:2.5rem"
+        class="absolute z-[900] flex items-center gap-2 px-2 py-2 rounded-2xl border border-slate-700/80 bg-[#0f172a]/90 backdrop-blur-sm shadow-2xl scrollbar-hide"
+        style="top:3.5rem; left:50%; transform:translateX(-50%); max-width:calc(100vw - 2rem); min-height:2.5rem; cursor:default;"
       >
-        <button data-apiary-filter="all"
-          class="apiary-filter-btn active shrink-0 px-3 py-1 rounded-full text-xs font-semibold border transition whitespace-nowrap"
-        >All Apiaries</button>
+        <!-- Drag handle -->
+        <span id="apiaryFilterHandle" title="Drag to reposition"
+          class="shrink-0 flex flex-col gap-0.5 px-0.5 py-1 cursor-grab active:cursor-grabbing text-slate-600 hover:text-slate-400 transition select-none">
+          <span class="block w-3 h-px bg-current rounded"></span>
+          <span class="block w-3 h-px bg-current rounded"></span>
+          <span class="block w-3 h-px bg-current rounded"></span>
+        </span>
+
+        <!-- Collapse toggle -->
+        <button id="apiaryFilterToggle" title="Hide apiary filter"
+          class="shrink-0 w-6 h-6 flex items-center justify-center rounded-full text-slate-500 hover:text-slate-300 hover:bg-slate-700/50 transition">
+          <svg id="apiaryFilterChevron" class="w-3.5 h-3.5 transition-transform duration-200" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7"/>
+          </svg>
+        </button>
+        <div id="apiaryFilterPills" class="flex items-center gap-2 overflow-x-auto scrollbar-hide">
+          <button data-apiary-filter="all"
+            class="apiary-filter-btn active shrink-0 px-3 py-1 rounded-full text-xs font-semibold border transition whitespace-nowrap"
+          >All Apiaries</button>
+        </div>
       </div>
 
       <!-- Right-side floating column (Today's Actions + Weather) -->
@@ -131,7 +157,7 @@
           </button>
 
           <!-- Expandable body -->
-          <div id="todayBody" class="hidden border-t border-slate-700/60 max-h-64 overflow-y-auto">
+          <div id="todayBody" class="hidden border-t border-slate-700/60">
             <ul id="todayList" class="py-1 text-xs divide-y divide-slate-800/60"></ul>
             <p id="todayEmpty" class="hidden px-4 py-3 text-slate-500 text-xs text-center">No actions scheduled for today</p>
           </div>
@@ -181,15 +207,15 @@
       <!-- Legend panel -->
       <div
         id="legendPanel"
-        class="hidden absolute right-3 top-3 z-[900] rounded-xl border border-yellow-900/40 bg-[#141d2b] p-4 shadow-2xl text-sm backdrop-blur-md ring-1 ring-white/5"
-        style="width: 16rem;"
+        class="hidden absolute right-3 top-3 z-[1100] rounded-xl border border-slate-700/50 bg-[#141d2b] px-4 pt-3 pb-4 shadow-2xl text-sm backdrop-blur-md ring-1 ring-white/5"
+        style="width: 14rem;"
       >
-        <p class="text-[11px] font-semibold uppercase tracking-widest text-hive-muted mb-3">Marker Colors</p>
-        <ul class="space-y-3">
+        <p class="text-[10px] font-semibold uppercase tracking-widest text-hive-muted mb-3">Yard Status</p>
+        <ul class="divide-y divide-hive-border/60">
 
           <!-- White / placed -->
-          <li class="flex items-center gap-3">
-            <svg width="30" height="44" viewBox="0 0 56 72" xmlns="http://www.w3.org/2000/svg" class="shrink-0">
+          <li class="flex items-center gap-3 py-2.5">
+            <svg width="26" height="38" viewBox="0 0 56 72" xmlns="http://www.w3.org/2000/svg" class="shrink-0">
               <ellipse cx="28" cy="24" rx="9"  ry="3.2" fill="#ffffff" stroke="#cbd5e1" stroke-width="1"/>
               <ellipse cx="28" cy="31" rx="15" ry="3.2" fill="#ffffff" stroke="#cbd5e1" stroke-width="1"/>
               <ellipse cx="28" cy="38" rx="20" ry="3.2" fill="#ffffff" stroke="#cbd5e1" stroke-width="1"/>
@@ -200,14 +226,17 @@
               <ellipse cx="28" cy="68" rx="16" ry="2" fill="#cbd5e1"/>
               <ellipse cx="28" cy="63" rx="4.5" ry="2.8" fill="rgba(0,0,0,0.2)"/>
               <circle cx="28" cy="12" r="12" fill="white" stroke="#64748b" stroke-width="3"/>
-              <text x="28" y="17" text-anchor="middle" font-family="system-ui,sans-serif" font-size="9" font-weight="900" fill="#334155">–</text>
+              <text x="28" y="17" text-anchor="middle" font-family="system-ui,sans-serif" font-size="9" font-weight="900" fill="#334155">5</text>
             </svg>
-            <div><p class="font-semibold text-slate-300 leading-tight">White — Placed</p><p class="text-xs text-slate-400">No actions yet</p></div>
+            <div class="min-w-0">
+              <p class="text-xs font-bold text-slate-200 leading-tight">Placed</p>
+              <p class="text-[11px] text-slate-500 mt-0.5">No actions scheduled</p>
+            </div>
           </li>
 
           <!-- Green / planned -->
-          <li class="flex items-center gap-3">
-            <svg width="30" height="44" viewBox="0 0 56 72" xmlns="http://www.w3.org/2000/svg" class="shrink-0">
+          <li class="flex items-center gap-3 py-2.5">
+            <svg width="26" height="38" viewBox="0 0 56 72" xmlns="http://www.w3.org/2000/svg" class="shrink-0">
               <ellipse cx="28" cy="24" rx="9"  ry="3.2" fill="#22c55e" stroke="#15803d" stroke-width="1"/>
               <ellipse cx="28" cy="31" rx="15" ry="3.2" fill="#22c55e" stroke="#15803d" stroke-width="1"/>
               <ellipse cx="28" cy="38" rx="20" ry="3.2" fill="#22c55e" stroke="#15803d" stroke-width="1"/>
@@ -220,30 +249,15 @@
               <circle cx="28" cy="12" r="12" fill="white" stroke="#14532d" stroke-width="3"/>
               <text x="28" y="17" text-anchor="middle" font-family="system-ui,sans-serif" font-size="9" font-weight="900" fill="#0f172a">6</text>
             </svg>
-            <div><p class="font-semibold text-green-400 leading-tight">Green — Action Planned</p><p class="text-xs text-slate-400">Future action scheduled</p></div>
-          </li>
-
-          <!-- Green + black outline / planned + waiting -->
-          <li class="flex items-center gap-3">
-            <svg width="30" height="44" viewBox="0 0 56 72" xmlns="http://www.w3.org/2000/svg" class="shrink-0">
-              <ellipse cx="28" cy="24" rx="9"  ry="3.2" fill="#22c55e" stroke="#0f172a" stroke-width="1"/>
-              <ellipse cx="28" cy="31" rx="15" ry="3.2" fill="#22c55e" stroke="#0f172a" stroke-width="1"/>
-              <ellipse cx="28" cy="38" rx="20" ry="3.2" fill="#22c55e" stroke="#0f172a" stroke-width="1"/>
-              <ellipse cx="28" cy="45" rx="23" ry="3.2" fill="#22c55e" stroke="#0f172a" stroke-width="1"/>
-              <ellipse cx="28" cy="52" rx="23" ry="3.2" fill="#22c55e" stroke="#0f172a" stroke-width="1"/>
-              <ellipse cx="28" cy="59" rx="21" ry="3.2" fill="#22c55e" stroke="#0f172a" stroke-width="1"/>
-              <ellipse cx="28" cy="65" rx="16" ry="3.2" fill="#22c55e" stroke="#0f172a" stroke-width="1"/>
-              <ellipse cx="28" cy="68" rx="16" ry="2" fill="#0f172a"/>
-              <ellipse cx="28" cy="63" rx="4.5" ry="2.8" fill="rgba(0,0,0,0.5)"/>
-              <circle cx="28" cy="12" r="12" fill="white" stroke="#14532d" stroke-width="3"/>
-              <text x="28" y="17" text-anchor="middle" font-family="system-ui,sans-serif" font-size="9" font-weight="900" fill="#0f172a">6</text>
-            </svg>
-            <div><p class="font-semibold text-green-400 leading-tight">Green + Black — Planned &amp; Overdue</p><p class="text-xs text-slate-400">Future action + overdue action</p></div>
+            <div class="min-w-0">
+              <p class="text-xs font-bold text-green-400 leading-tight">Action Planned</p>
+              <p class="text-[11px] text-slate-500 mt-0.5">Future action scheduled</p>
+            </div>
           </li>
 
           <!-- Yellow / done -->
-          <li class="flex items-center gap-3">
-            <svg width="30" height="44" viewBox="0 0 56 72" xmlns="http://www.w3.org/2000/svg" class="shrink-0">
+          <li class="flex items-center gap-3 py-2.5">
+            <svg width="26" height="38" viewBox="0 0 56 72" xmlns="http://www.w3.org/2000/svg" class="shrink-0">
               <ellipse cx="28" cy="24" rx="9"  ry="3.2" fill="#eab308" stroke="#a16207" stroke-width="1"/>
               <ellipse cx="28" cy="31" rx="15" ry="3.2" fill="#eab308" stroke="#a16207" stroke-width="1"/>
               <ellipse cx="28" cy="38" rx="20" ry="3.2" fill="#eab308" stroke="#a16207" stroke-width="1"/>
@@ -256,12 +270,15 @@
               <circle cx="28" cy="12" r="12" fill="white" stroke="#a16207" stroke-width="3"/>
               <text x="28" y="17" text-anchor="middle" font-family="system-ui,sans-serif" font-size="9" font-weight="900" fill="#0f172a">4</text>
             </svg>
-            <div><p class="font-semibold text-yellow-400 leading-tight">Yellow — Actions Done</p><p class="text-xs text-slate-400">All actions marked done</p></div>
+            <div class="min-w-0">
+              <p class="text-xs font-bold text-yellow-400 leading-tight">Action Done</p>
+              <p class="text-[11px] text-slate-500 mt-0.5">Actions marked as done</p>
+            </div>
           </li>
 
-          <!-- Yellow + black outline / done + waiting -->
-          <li class="flex items-center gap-3">
-            <svg width="30" height="44" viewBox="0 0 56 72" xmlns="http://www.w3.org/2000/svg" class="shrink-0">
+          <!-- Yellow + black outline / waiting -->
+          <li class="flex items-center gap-3 py-2.5">
+            <svg width="26" height="38" viewBox="0 0 56 72" xmlns="http://www.w3.org/2000/svg" class="shrink-0">
               <ellipse cx="28" cy="24" rx="9"  ry="3.2" fill="#eab308" stroke="#0f172a" stroke-width="1"/>
               <ellipse cx="28" cy="31" rx="15" ry="3.2" fill="#eab308" stroke="#0f172a" stroke-width="1"/>
               <ellipse cx="28" cy="38" rx="20" ry="3.2" fill="#eab308" stroke="#0f172a" stroke-width="1"/>
@@ -274,30 +291,15 @@
               <circle cx="28" cy="12" r="12" fill="white" stroke="#a16207" stroke-width="3"/>
               <text x="28" y="17" text-anchor="middle" font-family="system-ui,sans-serif" font-size="9" font-weight="900" fill="#0f172a">4</text>
             </svg>
-            <div><p class="font-semibold text-yellow-400 leading-tight">Yellow + Black — Done &amp; Overdue</p><p class="text-xs text-slate-400">Some done, some overdue</p></div>
-          </li>
-
-          <!-- White + black outline / placed + waiting -->
-          <li class="flex items-center gap-3">
-            <svg width="30" height="44" viewBox="0 0 56 72" xmlns="http://www.w3.org/2000/svg" class="shrink-0">
-              <ellipse cx="28" cy="24" rx="9"  ry="3.2" fill="#ffffff" stroke="#0f172a" stroke-width="1"/>
-              <ellipse cx="28" cy="31" rx="15" ry="3.2" fill="#ffffff" stroke="#0f172a" stroke-width="1"/>
-              <ellipse cx="28" cy="38" rx="20" ry="3.2" fill="#ffffff" stroke="#0f172a" stroke-width="1"/>
-              <ellipse cx="28" cy="45" rx="23" ry="3.2" fill="#ffffff" stroke="#0f172a" stroke-width="1"/>
-              <ellipse cx="28" cy="52" rx="23" ry="3.2" fill="#ffffff" stroke="#0f172a" stroke-width="1"/>
-              <ellipse cx="28" cy="59" rx="21" ry="3.2" fill="#ffffff" stroke="#0f172a" stroke-width="1"/>
-              <ellipse cx="28" cy="65" rx="16" ry="3.2" fill="#ffffff" stroke="#0f172a" stroke-width="1"/>
-              <ellipse cx="28" cy="68" rx="16" ry="2" fill="#0f172a"/>
-              <ellipse cx="28" cy="63" rx="4.5" ry="2.8" fill="rgba(0,0,0,0.3)"/>
-              <circle cx="28" cy="12" r="12" fill="white" stroke="#64748b" stroke-width="3"/>
-              <text x="28" y="17" text-anchor="middle" font-family="system-ui,sans-serif" font-size="9" font-weight="900" fill="#334155">3</text>
-            </svg>
-            <div><p class="font-semibold text-slate-200 leading-tight">White + Black — Overdue</p><p class="text-xs text-slate-400">Action date passed, nothing done</p></div>
+            <div class="min-w-0">
+              <p class="text-xs font-bold text-yellow-400 leading-tight">Action Waiting</p>
+              <p class="text-[11px] text-slate-500 mt-0.5">Overdue — action date passed</p>
+            </div>
           </li>
 
           <!-- Red / attention -->
-          <li class="flex items-center gap-3">
-            <svg width="30" height="44" viewBox="0 0 56 72" xmlns="http://www.w3.org/2000/svg" class="shrink-0">
+          <li class="flex items-center gap-3 py-2.5">
+            <svg width="26" height="38" viewBox="0 0 56 72" xmlns="http://www.w3.org/2000/svg" class="shrink-0">
               <ellipse cx="28" cy="24" rx="9"  ry="3.2" fill="#ef4444" stroke="#b91c1c" stroke-width="1"/>
               <ellipse cx="28" cy="31" rx="15" ry="3.2" fill="#ef4444" stroke="#b91c1c" stroke-width="1"/>
               <ellipse cx="28" cy="38" rx="20" ry="3.2" fill="#ef4444" stroke="#b91c1c" stroke-width="1"/>
@@ -310,11 +312,16 @@
               <circle cx="28" cy="12" r="12" fill="white" stroke="#991b1b" stroke-width="3"/>
               <text x="28" y="17" text-anchor="middle" font-family="system-ui,sans-serif" font-size="11" font-weight="900" fill="#0f172a">!</text>
             </svg>
-            <div><p class="font-semibold text-red-400 leading-tight">Red — Needs Attention</p><p class="text-xs text-slate-400">Active yard signal exists</p></div>
+            <div class="min-w-0">
+              <p class="text-xs font-bold text-red-400 leading-tight">Needs Attention</p>
+              <p class="text-[11px] text-slate-500 mt-0.5">Active yard signal reported</p>
+            </div>
           </li>
 
         </ul>
-        <p class="text-[10px] text-hive-muted mt-3 pt-3 border-t border-hive-border">Badge number = hive count per yard</p>
+        <p class="text-[10px] text-slate-600 mt-3 pt-3 border-t border-hive-border/60">
+          Badge number = hive count per yard
+        </p>
       </div>
 
       <!-- Status bar + Undo -->
@@ -420,6 +427,74 @@
         </button>
       </div>
 
+    </div>
+  </div>
+
+  <!-- ─── AI Chat Panel ──────────────────────────────────────────── -->
+  <div id="chatPanel"
+    class="hidden fixed z-[3500] flex flex-col rounded-2xl border border-slate-700/80 bg-[#0f172a] shadow-2xl overflow-hidden"
+    style="width: min(380px, calc(100vw - 1.5rem)); height: min(520px, calc(100dvh - 6rem));
+           right: 0.75rem; bottom: max(4rem, calc(env(safe-area-inset-bottom) + 3.5rem));">
+
+    <!-- Header -->
+    <div class="shrink-0 flex items-center gap-2.5 px-4 py-3 border-b border-slate-700/60 bg-slate-800/60">
+      <div class="w-7 h-7 rounded-full bg-amber-500/20 border border-amber-500/40 flex items-center justify-center shrink-0">
+        <svg class="w-3.5 h-3.5 text-amber-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z"/>
+        </svg>
+      </div>
+      <div class="flex-1 min-w-0">
+        <p class="text-sm font-bold text-white leading-tight">BeeLinked Assistant</p>
+        <p class="text-[10px] text-slate-500">Ask anything about your yards & apiaries</p>
+      </div>
+      <button id="chatSettingsBtn" title="API Key settings" class="p-1.5 rounded-lg text-slate-500 hover:text-slate-300 hover:bg-slate-700/50 transition">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/>
+          <path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
+        </svg>
+      </button>
+      <button id="chatClose" class="p-1.5 rounded-lg text-slate-500 hover:text-slate-300 hover:bg-slate-700/50 transition">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/>
+        </svg>
+      </button>
+    </div>
+
+    <!-- API Key setup -->
+    <div id="chatSetup" class="hidden flex-col gap-3 p-4 border-b border-slate-700/60 bg-slate-900/60">
+      <p class="text-xs text-slate-400">Enter your <span class="text-amber-400 font-semibold">OpenAI API key</span> to enable the assistant. It's stored only in your browser.</p>
+      <div class="flex gap-2">
+        <input id="chatApiKeyInput" type="password" placeholder="sk-..." autocomplete="off"
+          class="flex-1 rounded-lg bg-slate-800 border border-slate-600 text-slate-100 text-xs px-3 py-2 focus:outline-none focus:border-amber-500 placeholder-slate-600"/>
+        <button id="chatApiKeySave"
+          class="shrink-0 rounded-lg bg-amber-500/20 border border-amber-600/50 text-amber-300 text-xs font-semibold px-3 py-2 hover:bg-amber-500/30 transition">
+          Save
+        </button>
+      </div>
+    </div>
+
+    <!-- Messages -->
+    <div id="chatMessages" class="flex-1 overflow-y-auto p-4 space-y-3 bl-scroll">
+      <div class="flex gap-2.5">
+        <div class="w-6 h-6 rounded-full bg-amber-500/20 border border-amber-500/30 flex items-center justify-center shrink-0 mt-0.5">
+          <span class="text-amber-400 text-[10px]">🐝</span>
+        </div>
+        <div class="bg-slate-800/80 rounded-2xl rounded-tl-sm px-3 py-2 text-xs text-slate-300 max-w-[85%]">
+          Hi! I'm your BeeLinked assistant. Ask me anything about your yards, actions, hive counts, or signals. I can also navigate the map for you!
+        </div>
+      </div>
+    </div>
+
+    <!-- Input -->
+    <div class="shrink-0 flex gap-2 p-3 border-t border-slate-700/60 bg-slate-900/40">
+      <input id="chatInput" type="text" placeholder="Ask about your yards…"
+        class="flex-1 rounded-xl bg-slate-800 border border-slate-700 text-slate-100 text-xs px-3 py-2.5 focus:outline-none focus:border-amber-500/60 placeholder-slate-600 transition"/>
+      <button id="chatSendBtn"
+        class="shrink-0 w-9 h-9 rounded-xl bg-amber-500/20 border border-amber-600/50 text-amber-400 flex items-center justify-center hover:bg-amber-500/30 active:scale-95 transition">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"/>
+        </svg>
+      </button>
     </div>
   </div>
 
