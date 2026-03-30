@@ -3,6 +3,25 @@
 html, body { height: 100%; margin: 0; overflow: hidden; }
 body { font-family: ui-sans-serif, system-ui, -apple-system, sans-serif; background: #0f1419; color: #e2e8f0; }
 
+/* Kill browser-default blue on all links and buttons */
+a { color: inherit; text-decoration: none; }
+button {
+  -webkit-appearance: none;
+  appearance: none;
+  background: transparent;
+  border: none;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+  padding: 0;
+}
+
+/* Leaflet attribution links */
+.leaflet-control-attribution a,
+.leaflet-control-attribution a:visited {
+  color: #60a5fa !important;
+}
+
 /* ─── Map ───────────────────────────────────────────────────────── */
 #map {
   position: absolute;
@@ -70,39 +89,107 @@ body { font-family: ui-sans-serif, system-ui, -apple-system, sans-serif; backgro
 }
 
 /* ─── Scrollbar (modal body) ────────────────────────────────────── */
-.bl-scroll::-webkit-scrollbar { width: 5px; }
-.bl-scroll::-webkit-scrollbar-track { background: transparent; }
-.bl-scroll::-webkit-scrollbar-thumb { background: #2d3a4d; border-radius: 9999px; }
+/* ─── Global dark scrollbar ─────────────────────────────────────
+   Applied to every scrollable container in the app.
+   WebKit (Chrome, Edge, Safari) uses ::-webkit-scrollbar-*
+   Firefox uses scrollbar-width + scrollbar-color shorthand.
+   ──────────────────────────────────────────────────────────── */
+
+/* Shared selector list — add new scrollable containers here */
+.bl-scroll,
+.lv-filter-menu,
+.flex-1.overflow-y-auto,
+.overflow-auto,
+#listViewModal .overflow-auto,
+#newActionModal .overflow-y-auto,
+#yardModal .overflow-y-auto {
+
+  /* Firefox */
+  scrollbar-width: thin;
+  scrollbar-color: #374151 transparent;
+}
+
+/* WebKit */
+.bl-scroll::-webkit-scrollbar,
+.lv-filter-menu::-webkit-scrollbar,
+.flex-1.overflow-y-auto::-webkit-scrollbar,
+.overflow-auto::-webkit-scrollbar,
+#listViewModal .overflow-auto::-webkit-scrollbar,
+#newActionModal .overflow-y-auto::-webkit-scrollbar,
+#yardModal .overflow-y-auto::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+.bl-scroll::-webkit-scrollbar-track,
+.lv-filter-menu::-webkit-scrollbar-track,
+.flex-1.overflow-y-auto::-webkit-scrollbar-track,
+.overflow-auto::-webkit-scrollbar-track,
+#listViewModal .overflow-auto::-webkit-scrollbar-track,
+#newActionModal .overflow-y-auto::-webkit-scrollbar-track,
+#yardModal .overflow-y-auto::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.bl-scroll::-webkit-scrollbar-thumb,
+.lv-filter-menu::-webkit-scrollbar-thumb,
+.flex-1.overflow-y-auto::-webkit-scrollbar-thumb,
+.overflow-auto::-webkit-scrollbar-thumb,
+#listViewModal .overflow-auto::-webkit-scrollbar-thumb,
+#newActionModal .overflow-y-auto::-webkit-scrollbar-thumb,
+#yardModal .overflow-y-auto::-webkit-scrollbar-thumb {
+  background: #374151;
+  border-radius: 10px;
+}
+
+.bl-scroll::-webkit-scrollbar-thumb:hover,
+.lv-filter-menu::-webkit-scrollbar-thumb:hover,
+.flex-1.overflow-y-auto::-webkit-scrollbar-thumb:hover,
+.overflow-auto::-webkit-scrollbar-thumb:hover,
+#listViewModal .overflow-auto::-webkit-scrollbar-thumb:hover,
+#newActionModal .overflow-y-auto::-webkit-scrollbar-thumb:hover,
+#yardModal .overflow-y-auto::-webkit-scrollbar-thumb:hover {
+  background: #FFC107;
+}
 
 /* ─── Status tag variants ───────────────────────────────────────── */
 .tag-attention { background: rgba(239,68,68,0.18); color: #fca5a5; border: 1px solid rgba(239,68,68,0.35); }
-.tag-future    { background: rgba(34,197,94,0.15); color: #86efac; border: 1px solid rgba(34,197,94,0.3); }
+.tag-future    { background: rgba(59,130,246,0.15); color: #93c5fd; border: 1px solid rgba(59,130,246,0.3); }
 .tag-unseen    { background: rgba(234,179,8,0.15);  color: #fde047; border: 1px solid rgba(234,179,8,0.35); }
 .tag-default   { background: rgba(139,156,179,0.15); color: #94a3b8; border: 1px solid rgba(139,156,179,0.3); }
 
 /* ─── Action list items ─────────────────────────────────────────── */
 .action-past   { border-left: 3px solid #eab308; }
-.action-future { border-left: 3px solid #22c55e; }
+.action-future { border-left: 3px solid #3b82f6; }
 
 /* ─── FAB speed-dial pills ──────────────────────────────────────── */
-.fab-pill {
-  display: inline-flex;
+/* ─── Header FAB dropdown items ──────────────────────────────── */
+.fab-dropdown-item {
+  display: flex;
   align-items: center;
-  gap: 0.5rem;
-  padding: 0.55rem 1rem 0.55rem 0.75rem;
-  border-radius: 9999px;
-  background: #1a2538;
-  border: 1px solid #2d3f55;
-  color: #f1f5f9;
-  font-size: 0.8125rem;
+  gap: 0.65rem;
+  padding: 0.6rem 0.9rem;
+  border-radius: 0.75rem;
+  background: transparent;
+  border: 1px solid transparent;
+  color: #e2e8f0;
+  font-size: 0.875rem;
   font-weight: 600;
   white-space: nowrap;
-  box-shadow: 0 4px 14px rgba(0,0,0,0.45);
-  transition: background 0.15s, transform 0.12s;
   cursor: pointer;
+  transition: background 0.13s, border-color 0.13s, color 0.13s;
+  width: 100%;
+  text-align: left;
 }
-.fab-pill:hover  { background: #243248; }
-.fab-pill:active { transform: scale(0.96); }
+.fab-dropdown-item:hover {
+  background: #1a2538;
+  border-color: #2d3f55;
+  color: #ffffff;
+}
+.fab-dropdown-item:active { transform: scale(0.97); }
+
+/* keep old pill class for any legacy references */
+.fab-pill { display: none; }
 
 /* ─── Form controls (dark theme) ───────────────────────────────── */
 input, select, textarea {
@@ -132,8 +219,8 @@ input, select, textarea {
 }
 .bl-input::placeholder { color: #64748b; }
 .bl-input:focus {
-  border-color: #22c55e;
-  box-shadow: 0 0 0 2px rgba(34, 197, 94, 0.25);
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.25);
 }
 
 .bl-btn-green {
@@ -152,6 +239,24 @@ input, select, textarea {
 .bl-btn-green:hover  { background: #4ade80; }
 .bl-btn-green:active { transform: scale(0.97); }
 .bl-btn-green:disabled { opacity: 0.55; cursor: not-allowed; }
+
+.bl-btn-blue {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.375rem;
+  border-radius: 0.5rem;
+  background: #3b82f6;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  padding: 0.625rem 1rem;
+  font-size: 0.875rem;
+  font-weight: 700;
+  color: #ffffff;
+  transition: background 0.15s, transform 0.1s;
+}
+.bl-btn-blue:hover  { background: #2563eb; }
+.bl-btn-blue:active { transform: scale(0.97); }
+.bl-btn-blue:disabled { opacity: 0.55; cursor: not-allowed; }
 
 .bl-btn-ghost {
   display: inline-flex;
@@ -218,21 +323,22 @@ input, select, textarea {
 
 /* Yard marker tooltips */
 .bl-tooltip {
-  background: #141d2b !important;
+  background: rgba(14, 20, 30, 0.97) !important;
   border: 1px solid #243044 !important;
   border-radius: 10px !important;
   color: #f1f5f9 !important;
   font-size: 0.78rem !important;
   font-family: inherit !important;
-  padding: 6px 10px !important;
-  box-shadow: 0 4px 20px rgba(0,0,0,0.5) !important;
-  line-height: 1.55 !important;
+  padding: 8px 11px !important;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.55), 0 1px 3px rgba(0,0,0,0.3) !important;
+  backdrop-filter: blur(8px) !important;
+  line-height: 1.5 !important;
   white-space: nowrap;
   pointer-events: none;
 }
 .bl-tooltip strong { color: #fff; font-size: 0.82rem; }
 .bl-tooltip::before { border-top-color: #243044 !important; }
-.bl-tooltip.leaflet-tooltip-top::before { border-top-color: #243044 !important; }
+.bl-tooltip.leaflet-tooltip-top::before { border-top-color: #1e2d3d !important; }
 
 /* Action-type pill multi-select */
 .action-pill {
@@ -267,7 +373,117 @@ input, select, textarea {
 }
 .action-pill:active { transform: scale(0.95); }
 
-/* List-view column drag-and-drop */
+/* ─── List-view column drag-and-drop ───────────────────────────── */
 th.lv-col-dragging  { opacity: 0.4; cursor: grabbing; }
 th.lv-drop-left     { box-shadow: inset 3px 0 0 #f59e0b; background: rgba(245,158,11,0.07); }
 th.lv-drop-right    { box-shadow: inset -3px 0 0 #f59e0b; background: rgba(245,158,11,0.07); }
+
+/* ─── List-view search ──────────────────────────────────────────── */
+#listViewSearch {
+  background: #111827;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+#listViewSearch:focus {
+  border-color: #FFC107 !important;
+  box-shadow: 0 0 0 2px rgba(255,193,7,0.18);
+  outline: none;
+}
+
+/* ─── List-view filter buttons ──────────────────────────────────── */
+.lv-filter-btn {
+  padding-left:  0.875rem;
+  padding-right: 0.875rem;
+  transition: border-color 0.15s, box-shadow 0.15s, background 0.15s, color 0.15s;
+}
+.lv-filter-btn.lv-active {
+  border-color: #FFC107 !important;
+  color: #FFC107 !important;
+  background: rgba(255,193,7,0.08) !important;
+  box-shadow: 0 0 0 2px rgba(255,193,7,0.15), 0 0 8px rgba(255,193,7,0.10);
+}
+
+/* ─── List-view thead ───────────────────────────────────────────── */
+#lvTheadRow th {
+  background: #1f2937;
+  color: #9ca3af;
+  font-size: 0.75rem;
+  letter-spacing: 0.05em;
+  font-weight: 600;
+}
+#lvTheadRow th .sort-arrow { color: #4b5563; }
+#lvTheadRow th:hover .sort-arrow { color: #9ca3af; }
+#lvTheadRow th .sort-arrow.active { color: #fbbf24; }
+
+/* ─── Action sub-rows ───────────────────────────────────────────── */
+.lv-action-row td:first-child {
+  border-left: 2px solid #374151;
+}
+.lv-action-name { color: #9ca3af; }
+
+/* ─── Muted empty values ────────────────────────────────────────── */
+.lv-empty { color: #4b5563; }
+
+/* ─── Action badge fixed width ──────────────────────────────────── */
+.lv-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 5rem;
+  padding: 0.125rem 0.375rem;
+  border-radius: 9999px;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  border-width: 1px;
+  border-style: solid;
+}
+.lv-badge-upcoming { background: rgba(59,130,246,0.2); color: #ffffff; border-color: rgba(255,255,255,0.2); }
+.lv-badge-past     { background: rgba(78,52,7,0.4);   color: #fde68a; border-color: #92400e; }
+
+/* ─── Needs Attention pill ──────────────────────────────────────── */
+.lv-status-attention {
+  background: #7f1d1d !important;
+  border-color: #ef4444 !important;
+  color: #fca5a5 !important;
+}
+
+/* ─── Hollow pill — Placed (no actions) ─────────────────────────── */
+.lv-pill-hollow {
+  background: transparent !important;
+  border-color: rgba(203, 213, 225, 0.35) !important;
+  color: #94a3b8 !important;
+}
+
+/* ─── Glow pill — any status with an overdue action ─────────────── */
+.lv-pill-glow {
+  box-shadow:
+    0 0 0 1px  rgba(255, 255, 255, 0.22),
+    0 0 7px 2px  rgba(255, 255, 255, 0.28),
+    0 0 15px 3px rgba(255, 255, 255, 0.12);
+}
+
+/* ── Custom app tooltips ────────────────────────────────────────── */
+#bl-tooltip {
+  position: fixed;
+  z-index: 99999;
+  pointer-events: none;
+  padding: 5px 10px;
+  border-radius: 8px;
+  border: 1px solid #243044;
+  background: rgba(14, 20, 30, 0.95);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  color: #cbd5e1;
+  font-size: 11px;
+  font-weight: 500;
+  font-family: ui-sans-serif, system-ui, -apple-system, sans-serif;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.5), 0 1px 3px rgba(0,0,0,0.3);
+  opacity: 0;
+  transform: translateY(4px);
+  transition: opacity 0.15s ease, transform 0.15s ease;
+}
+#bl-tooltip.visible {
+  opacity: 1;
+  transform: translateY(0);
+}

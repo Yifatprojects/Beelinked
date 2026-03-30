@@ -48,52 +48,87 @@
 
     <!-- Header -->
     <header
-      class="shrink-0 z-[1000] flex items-center justify-between gap-3 px-4 bg-hive-panel/95 border-b border-hive-border"
+      class="shrink-0 z-[1000] grid grid-cols-[1fr_auto_1fr] items-center gap-2 px-4 bg-hive-panel/95 border-b border-hive-border"
       style="padding-top: max(0.75rem, env(safe-area-inset-top)); padding-bottom: 0.75rem;"
     >
+      <!-- Left: logo + name -->
       <div class="flex items-center gap-2.5 min-w-0">
         <img src="logo2.png" alt="BeeLinked logo" class="h-9 w-9 rounded-lg object-contain select-none shrink-0" />
-        <div class="min-w-0">
+        <div class="min-w-0 hidden sm:block">
           <h1 class="text-base font-bold tracking-tight text-white leading-tight">BeeLinked</h1>
           <p class="text-[11px] text-hive-muted leading-tight">Field Management</p>
         </div>
       </div>
 
-      <div class="flex items-center gap-2">
+      <!-- Centre: + Add button with dropdown -->
+      <div class="relative flex justify-center" id="headerFabWrap">
+        <button id="fabBtn" type="button" aria-label="Add new yard or action" aria-expanded="false" data-tip="Add yard or action"
+          class="header-fab-btn flex items-center gap-2 px-5 py-2 rounded-full font-bold text-sm text-[#0f1929] transition-all active:scale-95 select-none"
+          style="background: linear-gradient(135deg,#fbbf24,#f59e0b); box-shadow: 0 0 0 2px #fde68a55, 0 4px 18px rgba(234,179,8,0.45);">
+          <!-- Plus icon -->
+          <svg class="w-4 h-4 shrink-0 transition-transform duration-200" id="fabIcon" fill="none" stroke="currentColor" stroke-width="3" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/>
+          </svg>
+          <span class="hidden xs:inline">Add</span>
+        </button>
+
+        <!-- Dropdown menu -->
+        <div id="fabMenu" class="hidden absolute top-full left-1/2 -translate-x-1/2 mt-2 z-[1100] flex flex-col gap-1.5 p-2 rounded-2xl border border-hive-border bg-hive-panel shadow-2xl min-w-[180px]">
+          <!-- New Yard -->
+          <button id="btnNewYard" type="button" aria-label="Add new yard"
+            class="fab-dropdown-item">
+            <svg width="18" height="22" viewBox="0 0 56 72" xmlns="http://www.w3.org/2000/svg" class="shrink-0" aria-hidden="true">
+              <ellipse cx="28" cy="24" rx="9"  ry="3.2" fill="#ffffff" stroke="#cbd5e1" stroke-width="1"/>
+              <ellipse cx="28" cy="31" rx="15" ry="3.2" fill="#ffffff" stroke="#cbd5e1" stroke-width="1"/>
+              <ellipse cx="28" cy="38" rx="20" ry="3.2" fill="#ffffff" stroke="#cbd5e1" stroke-width="1"/>
+              <ellipse cx="28" cy="45" rx="23" ry="3.2" fill="#ffffff" stroke="#cbd5e1" stroke-width="1"/>
+              <ellipse cx="28" cy="52" rx="23" ry="3.2" fill="#ffffff" stroke="#cbd5e1" stroke-width="1"/>
+              <ellipse cx="28" cy="59" rx="21" ry="3.2" fill="#ffffff" stroke="#cbd5e1" stroke-width="1"/>
+              <ellipse cx="28" cy="65" rx="16" ry="3.2" fill="#ffffff" stroke="#cbd5e1" stroke-width="1"/>
+              <ellipse cx="28" cy="68" rx="16" ry="2"   fill="#cbd5e1"/>
+              <ellipse cx="28" cy="63" rx="4.5" ry="2.8" fill="rgba(0,0,0,0.2)"/>
+            </svg>
+            <span>New Yard</span>
+          </button>
+
+          <!-- New Action -->
+          <button id="btnNewAction" type="button" aria-label="Add new action"
+            class="fab-dropdown-item">
+            <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01"/>
+            </svg>
+            <span>New Action</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Right: action buttons -->
+      <div class="flex items-center gap-2 justify-end">
         <!-- Refresh -->
-        <button
-          id="refreshBtn"
-          type="button"
-          title="Refresh yards"
+        <button id="refreshBtn" type="button" data-tip="Refresh yards"
           class="p-2 rounded-lg border border-hive-border bg-hive-bg/60 text-slate-400 hover:text-white hover:bg-hive-card active:scale-95 transition"
-          aria-label="Refresh yards"
-        >
+          aria-label="Refresh yards">
           <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
           </svg>
         </button>
 
-        <!-- AI Assistant -->
-        <button id="chatAgentBtn" type="button" title="BeeLinked Assistant"
-          class="p-2 rounded-lg border border-hive-border bg-hive-bg/60 text-amber-400 hover:text-amber-300 hover:bg-hive-card active:scale-95 transition"
-          aria-label="Open AI assistant">
-          <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z"/>
-          </svg>
-        </button>
-
         <!-- Legend toggle -->
-        <button
-          id="legendToggle"
-          type="button"
-          class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-hive-border bg-hive-bg/60 text-sm font-medium text-slate-300 hover:text-white hover:bg-hive-card active:scale-95 transition"
-          aria-expanded="false"
-          aria-controls="legendPanel"
-        >
+        <button id="legendToggle" type="button" data-tip="Yard Status Legend"
+          class="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-hive-border bg-hive-bg/60 text-sm font-medium text-slate-300 hover:text-white hover:bg-hive-card active:scale-95 transition"
+          aria-expanded="false" aria-controls="legendPanel">
           <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
             <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
           </svg>
           Legend
+        </button>
+        <!-- Legend toggle (icon-only on mobile) -->
+        <button id="legendToggleMobile" type="button" data-tip="Yard Status Legend"
+          class="flex sm:hidden p-2 rounded-lg border border-hive-border bg-hive-bg/60 text-slate-300 hover:text-white hover:bg-hive-card active:scale-95 transition"
+          aria-label="Toggle legend">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
+          </svg>
         </button>
       </div>
     </header>
@@ -108,7 +143,7 @@
         style="top:3.5rem; left:50%; transform:translateX(-50%); max-width:calc(100vw - 2rem); min-height:2.5rem; cursor:default;"
       >
         <!-- Drag handle -->
-        <span id="apiaryFilterHandle" title="Drag to reposition"
+        <span id="apiaryFilterHandle" data-tip="Drag to reposition"
           class="shrink-0 flex flex-col gap-0.5 px-0.5 py-1 cursor-grab active:cursor-grabbing text-slate-600 hover:text-slate-400 transition select-none">
           <span class="block w-3 h-px bg-current rounded"></span>
           <span class="block w-3 h-px bg-current rounded"></span>
@@ -116,7 +151,7 @@
         </span>
 
         <!-- Collapse toggle -->
-        <button id="apiaryFilterToggle" title="Hide apiary filter"
+        <button id="apiaryFilterToggle" data-tip="Hide apiary filter"
           class="shrink-0 w-6 h-6 flex items-center justify-center rounded-full text-slate-500 hover:text-slate-300 hover:bg-slate-700/50 transition">
           <svg id="apiaryFilterChevron" class="w-3.5 h-3.5 transition-transform duration-200" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7"/>
@@ -141,7 +176,9 @@
             class="w-full flex items-center justify-between gap-2 px-4 py-2.5 hover:bg-slate-800/50 transition"
             aria-expanded="false">
             <div class="flex items-center gap-2">
-              <span class="text-base leading-none">📋</span>
+              <svg class="w-4 h-4 shrink-0 text-slate-300" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01"/>
+              </svg>
               <span class="text-sm font-semibold text-white">Today's Actions</span>
             </div>
             <div class="flex items-center gap-2">
@@ -169,7 +206,7 @@
           <!-- Collapsed pill (always visible) -->
           <div id="weatherPill"
             class="flex items-center gap-2 px-3 py-1.5 rounded-full border border-slate-700/80 bg-[#0f172a]/90 backdrop-blur-sm shadow-lg cursor-pointer hover:border-slate-500 transition-all duration-200"
-            title="Click for full weather details">
+            data-tip="Click for full weather details">
             <span id="weatherIconSmall" class="text-lg leading-none">⏳</span>
             <span id="weatherTempSmall" class="text-sm font-bold">--°</span>
           </div>
@@ -213,20 +250,18 @@
         <p class="text-[10px] font-semibold uppercase tracking-widest text-hive-muted mb-3">Yard Status</p>
         <ul class="divide-y divide-hive-border/60">
 
-          <!-- White / placed -->
+          <!-- Hollow / placed -->
           <li class="flex items-center gap-3 py-2.5">
-            <svg width="26" height="38" viewBox="0 0 56 72" xmlns="http://www.w3.org/2000/svg" class="shrink-0">
-              <ellipse cx="28" cy="24" rx="9"  ry="3.2" fill="#ffffff" stroke="#cbd5e1" stroke-width="1"/>
-              <ellipse cx="28" cy="31" rx="15" ry="3.2" fill="#ffffff" stroke="#cbd5e1" stroke-width="1"/>
-              <ellipse cx="28" cy="38" rx="20" ry="3.2" fill="#ffffff" stroke="#cbd5e1" stroke-width="1"/>
-              <ellipse cx="28" cy="45" rx="23" ry="3.2" fill="#ffffff" stroke="#cbd5e1" stroke-width="1"/>
-              <ellipse cx="28" cy="52" rx="23" ry="3.2" fill="#ffffff" stroke="#cbd5e1" stroke-width="1"/>
-              <ellipse cx="28" cy="59" rx="21" ry="3.2" fill="#ffffff" stroke="#cbd5e1" stroke-width="1"/>
-              <ellipse cx="28" cy="65" rx="16" ry="3.2" fill="#ffffff" stroke="#cbd5e1" stroke-width="1"/>
-              <ellipse cx="28" cy="68" rx="16" ry="2" fill="#cbd5e1"/>
-              <ellipse cx="28" cy="63" rx="4.5" ry="2.8" fill="rgba(0,0,0,0.2)"/>
-              <circle cx="28" cy="12" r="12" fill="white" stroke="#64748b" stroke-width="3"/>
-              <text x="28" y="17" text-anchor="middle" font-family="system-ui,sans-serif" font-size="9" font-weight="900" fill="#334155">5</text>
+            <svg width="22" height="34" viewBox="0 0 56 56" xmlns="http://www.w3.org/2000/svg" class="shrink-0">
+              <ellipse cx="28" cy="4"  rx="9"  ry="3.2" fill="#0f1929" stroke="#cbd5e1" stroke-width="1.5"/>
+              <ellipse cx="28" cy="11" rx="15" ry="3.2" fill="#0f1929" stroke="#cbd5e1" stroke-width="1.5"/>
+              <ellipse cx="28" cy="18" rx="20" ry="3.2" fill="#0f1929" stroke="#cbd5e1" stroke-width="1.5"/>
+              <ellipse cx="28" cy="25" rx="23" ry="3.2" fill="#0f1929" stroke="#cbd5e1" stroke-width="1.5"/>
+              <ellipse cx="28" cy="32" rx="23" ry="3.2" fill="#0f1929" stroke="#cbd5e1" stroke-width="1.5"/>
+              <ellipse cx="28" cy="39" rx="21" ry="3.2" fill="#0f1929" stroke="#cbd5e1" stroke-width="1.5"/>
+              <ellipse cx="28" cy="45" rx="16" ry="3.2" fill="#0f1929" stroke="#cbd5e1" stroke-width="1.5"/>
+              <ellipse cx="28" cy="49" rx="16" ry="2"   fill="#cbd5e1" opacity="0.5"/>
+              <ellipse cx="28" cy="44" rx="4.5" ry="2.8" fill="rgba(255,255,255,0.1)"/>
             </svg>
             <div class="min-w-0">
               <p class="text-xs font-bold text-slate-200 leading-tight">Placed</p>
@@ -234,41 +269,37 @@
             </div>
           </li>
 
-          <!-- Green / planned -->
+          <!-- Blue / planned -->
           <li class="flex items-center gap-3 py-2.5">
-            <svg width="26" height="38" viewBox="0 0 56 72" xmlns="http://www.w3.org/2000/svg" class="shrink-0">
-              <ellipse cx="28" cy="24" rx="9"  ry="3.2" fill="#22c55e" stroke="#15803d" stroke-width="1"/>
-              <ellipse cx="28" cy="31" rx="15" ry="3.2" fill="#22c55e" stroke="#15803d" stroke-width="1"/>
-              <ellipse cx="28" cy="38" rx="20" ry="3.2" fill="#22c55e" stroke="#15803d" stroke-width="1"/>
-              <ellipse cx="28" cy="45" rx="23" ry="3.2" fill="#22c55e" stroke="#15803d" stroke-width="1"/>
-              <ellipse cx="28" cy="52" rx="23" ry="3.2" fill="#22c55e" stroke="#15803d" stroke-width="1"/>
-              <ellipse cx="28" cy="59" rx="21" ry="3.2" fill="#22c55e" stroke="#15803d" stroke-width="1"/>
-              <ellipse cx="28" cy="65" rx="16" ry="3.2" fill="#22c55e" stroke="#15803d" stroke-width="1"/>
-              <ellipse cx="28" cy="68" rx="16" ry="2" fill="#15803d"/>
-              <ellipse cx="28" cy="63" rx="4.5" ry="2.8" fill="rgba(0,0,0,0.45)"/>
-              <circle cx="28" cy="12" r="12" fill="white" stroke="#14532d" stroke-width="3"/>
-              <text x="28" y="17" text-anchor="middle" font-family="system-ui,sans-serif" font-size="9" font-weight="900" fill="#0f172a">6</text>
+            <svg width="22" height="34" viewBox="0 0 56 56" xmlns="http://www.w3.org/2000/svg" class="shrink-0">
+              <ellipse cx="28" cy="4"  rx="9"  ry="3.2" fill="#3b82f6" stroke="#1d4ed8" stroke-width="1"/>
+              <ellipse cx="28" cy="11" rx="15" ry="3.2" fill="#3b82f6" stroke="#1d4ed8" stroke-width="1"/>
+              <ellipse cx="28" cy="18" rx="20" ry="3.2" fill="#3b82f6" stroke="#1d4ed8" stroke-width="1"/>
+              <ellipse cx="28" cy="25" rx="23" ry="3.2" fill="#3b82f6" stroke="#1d4ed8" stroke-width="1"/>
+              <ellipse cx="28" cy="32" rx="23" ry="3.2" fill="#3b82f6" stroke="#1d4ed8" stroke-width="1"/>
+              <ellipse cx="28" cy="39" rx="21" ry="3.2" fill="#3b82f6" stroke="#1d4ed8" stroke-width="1"/>
+              <ellipse cx="28" cy="45" rx="16" ry="3.2" fill="#3b82f6" stroke="#1d4ed8" stroke-width="1"/>
+              <ellipse cx="28" cy="49" rx="16" ry="2"   fill="#1d4ed8"/>
+              <ellipse cx="28" cy="44" rx="4.5" ry="2.8" fill="rgba(0,0,0,0.45)"/>
             </svg>
             <div class="min-w-0">
-              <p class="text-xs font-bold text-green-400 leading-tight">Action Planned</p>
+              <p class="text-xs font-bold text-blue-400 leading-tight">Action Planned</p>
               <p class="text-[11px] text-slate-500 mt-0.5">Future action scheduled</p>
             </div>
           </li>
 
           <!-- Yellow / done -->
           <li class="flex items-center gap-3 py-2.5">
-            <svg width="26" height="38" viewBox="0 0 56 72" xmlns="http://www.w3.org/2000/svg" class="shrink-0">
-              <ellipse cx="28" cy="24" rx="9"  ry="3.2" fill="#eab308" stroke="#a16207" stroke-width="1"/>
-              <ellipse cx="28" cy="31" rx="15" ry="3.2" fill="#eab308" stroke="#a16207" stroke-width="1"/>
-              <ellipse cx="28" cy="38" rx="20" ry="3.2" fill="#eab308" stroke="#a16207" stroke-width="1"/>
-              <ellipse cx="28" cy="45" rx="23" ry="3.2" fill="#eab308" stroke="#a16207" stroke-width="1"/>
-              <ellipse cx="28" cy="52" rx="23" ry="3.2" fill="#eab308" stroke="#a16207" stroke-width="1"/>
-              <ellipse cx="28" cy="59" rx="21" ry="3.2" fill="#eab308" stroke="#a16207" stroke-width="1"/>
-              <ellipse cx="28" cy="65" rx="16" ry="3.2" fill="#eab308" stroke="#a16207" stroke-width="1"/>
-              <ellipse cx="28" cy="68" rx="16" ry="2" fill="#a16207"/>
-              <ellipse cx="28" cy="63" rx="4.5" ry="2.8" fill="rgba(0,0,0,0.45)"/>
-              <circle cx="28" cy="12" r="12" fill="white" stroke="#a16207" stroke-width="3"/>
-              <text x="28" y="17" text-anchor="middle" font-family="system-ui,sans-serif" font-size="9" font-weight="900" fill="#0f172a">4</text>
+            <svg width="22" height="34" viewBox="0 0 56 56" xmlns="http://www.w3.org/2000/svg" class="shrink-0">
+              <ellipse cx="28" cy="4"  rx="9"  ry="3.2" fill="#eab308" stroke="#a16207" stroke-width="1"/>
+              <ellipse cx="28" cy="11" rx="15" ry="3.2" fill="#eab308" stroke="#a16207" stroke-width="1"/>
+              <ellipse cx="28" cy="18" rx="20" ry="3.2" fill="#eab308" stroke="#a16207" stroke-width="1"/>
+              <ellipse cx="28" cy="25" rx="23" ry="3.2" fill="#eab308" stroke="#a16207" stroke-width="1"/>
+              <ellipse cx="28" cy="32" rx="23" ry="3.2" fill="#eab308" stroke="#a16207" stroke-width="1"/>
+              <ellipse cx="28" cy="39" rx="21" ry="3.2" fill="#eab308" stroke="#a16207" stroke-width="1"/>
+              <ellipse cx="28" cy="45" rx="16" ry="3.2" fill="#eab308" stroke="#a16207" stroke-width="1"/>
+              <ellipse cx="28" cy="49" rx="16" ry="2"   fill="#a16207"/>
+              <ellipse cx="28" cy="44" rx="4.5" ry="2.8" fill="rgba(0,0,0,0.45)"/>
             </svg>
             <div class="min-w-0">
               <p class="text-xs font-bold text-yellow-400 leading-tight">Action Done</p>
@@ -276,41 +307,38 @@
             </div>
           </li>
 
-          <!-- Yellow + black outline / waiting -->
+          <!-- White glow = overdue action modifier -->
           <li class="flex items-center gap-3 py-2.5">
-            <svg width="26" height="38" viewBox="0 0 56 72" xmlns="http://www.w3.org/2000/svg" class="shrink-0">
-              <ellipse cx="28" cy="24" rx="9"  ry="3.2" fill="#eab308" stroke="#0f172a" stroke-width="1"/>
-              <ellipse cx="28" cy="31" rx="15" ry="3.2" fill="#eab308" stroke="#0f172a" stroke-width="1"/>
-              <ellipse cx="28" cy="38" rx="20" ry="3.2" fill="#eab308" stroke="#0f172a" stroke-width="1"/>
-              <ellipse cx="28" cy="45" rx="23" ry="3.2" fill="#eab308" stroke="#0f172a" stroke-width="1"/>
-              <ellipse cx="28" cy="52" rx="23" ry="3.2" fill="#eab308" stroke="#0f172a" stroke-width="1"/>
-              <ellipse cx="28" cy="59" rx="21" ry="3.2" fill="#eab308" stroke="#0f172a" stroke-width="1"/>
-              <ellipse cx="28" cy="65" rx="16" ry="3.2" fill="#eab308" stroke="#0f172a" stroke-width="1"/>
-              <ellipse cx="28" cy="68" rx="16" ry="2" fill="#0f172a"/>
-              <ellipse cx="28" cy="63" rx="4.5" ry="2.8" fill="rgba(0,0,0,0.5)"/>
-              <circle cx="28" cy="12" r="12" fill="white" stroke="#a16207" stroke-width="3"/>
-              <text x="28" y="17" text-anchor="middle" font-family="system-ui,sans-serif" font-size="9" font-weight="900" fill="#0f172a">4</text>
+            <svg width="22" height="34" viewBox="0 0 56 56" xmlns="http://www.w3.org/2000/svg" class="shrink-0"
+              style="filter:drop-shadow(0 0 4px rgba(255,255,255,0.9)) drop-shadow(0 0 10px rgba(255,255,255,0.45));">
+              <ellipse cx="28" cy="4"  rx="9"  ry="3.2" fill="#eab308" stroke="#a16207" stroke-width="1"/>
+              <ellipse cx="28" cy="11" rx="15" ry="3.2" fill="#eab308" stroke="#a16207" stroke-width="1"/>
+              <ellipse cx="28" cy="18" rx="20" ry="3.2" fill="#eab308" stroke="#a16207" stroke-width="1"/>
+              <ellipse cx="28" cy="25" rx="23" ry="3.2" fill="#eab308" stroke="#a16207" stroke-width="1"/>
+              <ellipse cx="28" cy="32" rx="23" ry="3.2" fill="#eab308" stroke="#a16207" stroke-width="1"/>
+              <ellipse cx="28" cy="39" rx="21" ry="3.2" fill="#eab308" stroke="#a16207" stroke-width="1"/>
+              <ellipse cx="28" cy="45" rx="16" ry="3.2" fill="#eab308" stroke="#a16207" stroke-width="1"/>
+              <ellipse cx="28" cy="49" rx="16" ry="2"   fill="#a16207"/>
+              <ellipse cx="28" cy="44" rx="4.5" ry="2.8" fill="rgba(0,0,0,0.45)"/>
             </svg>
             <div class="min-w-0">
-              <p class="text-xs font-bold text-yellow-400 leading-tight">Action Waiting</p>
-              <p class="text-[11px] text-slate-500 mt-0.5">Overdue — action date passed</p>
+              <p class="text-xs font-bold text-slate-200 leading-tight">+ Overdue Action</p>
+              <p class="text-[11px] text-slate-500 mt-0.5">White glow = action date passed</p>
             </div>
           </li>
 
           <!-- Red / attention -->
           <li class="flex items-center gap-3 py-2.5">
-            <svg width="26" height="38" viewBox="0 0 56 72" xmlns="http://www.w3.org/2000/svg" class="shrink-0">
-              <ellipse cx="28" cy="24" rx="9"  ry="3.2" fill="#ef4444" stroke="#b91c1c" stroke-width="1"/>
-              <ellipse cx="28" cy="31" rx="15" ry="3.2" fill="#ef4444" stroke="#b91c1c" stroke-width="1"/>
-              <ellipse cx="28" cy="38" rx="20" ry="3.2" fill="#ef4444" stroke="#b91c1c" stroke-width="1"/>
-              <ellipse cx="28" cy="45" rx="23" ry="3.2" fill="#ef4444" stroke="#b91c1c" stroke-width="1"/>
-              <ellipse cx="28" cy="52" rx="23" ry="3.2" fill="#ef4444" stroke="#b91c1c" stroke-width="1"/>
-              <ellipse cx="28" cy="59" rx="21" ry="3.2" fill="#ef4444" stroke="#b91c1c" stroke-width="1"/>
-              <ellipse cx="28" cy="65" rx="16" ry="3.2" fill="#ef4444" stroke="#b91c1c" stroke-width="1"/>
-              <ellipse cx="28" cy="68" rx="16" ry="2" fill="#b91c1c"/>
-              <ellipse cx="28" cy="63" rx="4.5" ry="2.8" fill="rgba(0,0,0,0.55)"/>
-              <circle cx="28" cy="12" r="12" fill="white" stroke="#991b1b" stroke-width="3"/>
-              <text x="28" y="17" text-anchor="middle" font-family="system-ui,sans-serif" font-size="11" font-weight="900" fill="#0f172a">!</text>
+            <svg width="22" height="34" viewBox="0 0 56 56" xmlns="http://www.w3.org/2000/svg" class="shrink-0">
+              <ellipse cx="28" cy="4"  rx="9"  ry="3.2" fill="#ef4444" stroke="#b91c1c" stroke-width="1"/>
+              <ellipse cx="28" cy="11" rx="15" ry="3.2" fill="#ef4444" stroke="#b91c1c" stroke-width="1"/>
+              <ellipse cx="28" cy="18" rx="20" ry="3.2" fill="#ef4444" stroke="#b91c1c" stroke-width="1"/>
+              <ellipse cx="28" cy="25" rx="23" ry="3.2" fill="#ef4444" stroke="#b91c1c" stroke-width="1"/>
+              <ellipse cx="28" cy="32" rx="23" ry="3.2" fill="#ef4444" stroke="#b91c1c" stroke-width="1"/>
+              <ellipse cx="28" cy="39" rx="21" ry="3.2" fill="#ef4444" stroke="#b91c1c" stroke-width="1"/>
+              <ellipse cx="28" cy="45" rx="16" ry="3.2" fill="#ef4444" stroke="#b91c1c" stroke-width="1"/>
+              <ellipse cx="28" cy="49" rx="16" ry="2"   fill="#b91c1c"/>
+              <ellipse cx="28" cy="44" rx="4.5" ry="2.8" fill="rgba(0,0,0,0.55)"/>
             </svg>
             <div class="min-w-0">
               <p class="text-xs font-bold text-red-400 leading-tight">Needs Attention</p>
@@ -333,7 +361,7 @@
           <span class="w-1.5 h-1.5 rounded-full bg-emerald-500/70 shrink-0 animate-pulse"></span>
           <span id="statusText" class="text-xs text-slate-500 truncate">Loading yards…</span>
         </div>
-        <button id="undoBtnStatus" title="Undo last relocation"
+        <button id="undoBtnStatus" data-tip="Undo last relocation"
           class="shrink-0 flex items-center justify-center w-7 h-7 rounded-lg border border-slate-800 bg-[#080d14]/85 backdrop-blur-sm text-slate-600 transition hover:text-amber-400 hover:border-amber-800/60 active:scale-95"
           style="opacity:0.35;pointer-events:none;">
           <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
@@ -348,18 +376,19 @@
 
       <!-- ── Map-click mode banner -->
       <div id="mapClickBanner" class="hidden absolute top-0 left-0 right-0 z-[1600] pointer-events-none">
-        <div class="pointer-events-auto mx-3 mt-3 flex items-center justify-between gap-3 rounded-xl border border-green-700 bg-green-950/95 px-4 py-3 shadow-xl">
+        <div class="pointer-events-auto mx-3 mt-3 flex items-center justify-between gap-3 rounded-xl px-4 py-3 shadow-xl"
+             style="background: rgba(30,64,175,0.88); border-top: 1px solid #3b82f6; border-bottom: 1px solid #3b82f6; border-left: 1px solid rgba(59,130,246,0.35); border-right: 1px solid rgba(59,130,246,0.35);">
           <div class="flex items-center gap-2 min-w-0">
-            <svg class="w-4 h-4 shrink-0 text-green-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <svg class="w-4 h-4 shrink-0 text-white" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/>
               <path stroke-linecap="round" stroke-linejoin="round" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"/>
             </svg>
-            <p id="mapClickBannerMsg" class="text-sm font-medium text-green-100 truncate">
+            <p id="mapClickBannerMsg" class="text-sm font-medium text-white truncate">
               Tap the map to pin <strong id="newYardNameDisplay" class="font-bold text-white"></strong>
             </p>
           </div>
           <button id="cancelMapClick" type="button"
-            class="shrink-0 rounded-lg px-2.5 py-1 text-xs font-semibold text-green-300 hover:bg-green-800 hover:text-white transition">
+            class="shrink-0 rounded-lg px-2.5 py-1 text-xs font-semibold text-blue-200 hover:bg-blue-700/60 hover:text-white transition">
             Cancel
           </button>
         </div>
@@ -376,125 +405,8 @@
         </button>
       </div>
 
-      <!-- ── Floating Action Button + speed dial -->
-      <div id="fabWrap" class="absolute z-[900]"
-           style="right: 0.75rem; bottom: max(4rem, calc(env(safe-area-inset-bottom) + 3.5rem));">
+      <!-- FAB moved to header -->
 
-        <!-- Speed dial options (hidden by default) -->
-        <div id="fabMenu" class="hidden flex flex-col items-end gap-2.5 mb-3">
-
-          <!-- New Action — single pill: icon + label -->
-          <button id="btnNewAction" type="button" aria-label="Add new action"
-            class="fab-pill">
-            <!-- Clipboard icon -->
-            <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01"/>
-            </svg>
-            New Action
-          </button>
-
-          <!-- New Yard — single pill: beehive map icon + label -->
-          <button id="btnNewYard" type="button" aria-label="Add new yard"
-            class="fab-pill">
-            <!-- Beehive SVG — exact match to map marker (placed/white style) -->
-            <svg width="19" height="28" viewBox="0 0 56 72" xmlns="http://www.w3.org/2000/svg" class="shrink-0" aria-hidden="true">
-              <ellipse cx="28" cy="24" rx="9"  ry="3.2" fill="#ffffff" stroke="#cbd5e1" stroke-width="1"/>
-              <ellipse cx="28" cy="31" rx="15" ry="3.2" fill="#ffffff" stroke="#cbd5e1" stroke-width="1"/>
-              <ellipse cx="28" cy="38" rx="20" ry="3.2" fill="#ffffff" stroke="#cbd5e1" stroke-width="1"/>
-              <ellipse cx="28" cy="45" rx="23" ry="3.2" fill="#ffffff" stroke="#cbd5e1" stroke-width="1"/>
-              <ellipse cx="28" cy="52" rx="23" ry="3.2" fill="#ffffff" stroke="#cbd5e1" stroke-width="1"/>
-              <ellipse cx="28" cy="59" rx="21" ry="3.2" fill="#ffffff" stroke="#cbd5e1" stroke-width="1"/>
-              <ellipse cx="28" cy="65" rx="16" ry="3.2" fill="#ffffff" stroke="#cbd5e1" stroke-width="1"/>
-              <ellipse cx="28" cy="68" rx="16" ry="2"   fill="#cbd5e1"/>
-              <ellipse cx="28" cy="63" rx="4.5" ry="2.8" fill="rgba(0,0,0,0.2)"/>
-              <circle  cx="28" cy="12" r="12" fill="white" stroke="#64748b" stroke-width="3"/>
-              <text x="28" y="17" text-anchor="middle" font-family="system-ui,sans-serif" font-size="14" font-weight="900" fill="#334155">+</text>
-            </svg>
-            New Yard
-          </button>
-
-        </div>
-
-        <!-- Main FAB — yellow with amber outline -->
-        <button id="fabBtn" type="button"
-          class="w-14 h-14 rounded-full flex items-center justify-center transition-all active:scale-95"
-          style="background:#eab308; box-shadow: 0 0 0 3px #fde68a, 0 6px 20px rgba(234,179,8,0.45);"
-          aria-label="Add new yard or action" aria-expanded="false">
-          <svg id="fabIcon" class="w-7 h-7 transition-transform duration-200 text-white"
-               fill="none" stroke="currentColor" stroke-width="2.8" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/>
-          </svg>
-        </button>
-      </div>
-
-    </div>
-  </div>
-
-  <!-- ─── AI Chat Panel ──────────────────────────────────────────── -->
-  <div id="chatPanel"
-    class="hidden fixed z-[3500] flex flex-col rounded-2xl border border-slate-700/80 bg-[#0f172a] shadow-2xl overflow-hidden"
-    style="width: min(380px, calc(100vw - 1.5rem)); height: min(520px, calc(100dvh - 6rem));
-           right: 0.75rem; bottom: max(4rem, calc(env(safe-area-inset-bottom) + 3.5rem));">
-
-    <!-- Header -->
-    <div class="shrink-0 flex items-center gap-2.5 px-4 py-3 border-b border-slate-700/60 bg-slate-800/60">
-      <div class="w-7 h-7 rounded-full bg-amber-500/20 border border-amber-500/40 flex items-center justify-center shrink-0">
-        <svg class="w-3.5 h-3.5 text-amber-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z"/>
-        </svg>
-      </div>
-      <div class="flex-1 min-w-0">
-        <p class="text-sm font-bold text-white leading-tight">BeeLinked Assistant</p>
-        <p class="text-[10px] text-slate-500">Ask anything about your yards & apiaries</p>
-      </div>
-      <button id="chatSettingsBtn" title="API Key settings" class="p-1.5 rounded-lg text-slate-500 hover:text-slate-300 hover:bg-slate-700/50 transition">
-        <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/>
-          <path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
-        </svg>
-      </button>
-      <button id="chatClose" class="p-1.5 rounded-lg text-slate-500 hover:text-slate-300 hover:bg-slate-700/50 transition">
-        <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/>
-        </svg>
-      </button>
-    </div>
-
-    <!-- API Key setup -->
-    <div id="chatSetup" class="hidden flex-col gap-3 p-4 border-b border-slate-700/60 bg-slate-900/60">
-      <p class="text-xs text-slate-400">Enter your <span class="text-amber-400 font-semibold">OpenAI API key</span> to enable the assistant. It's stored only in your browser.</p>
-      <div class="flex gap-2">
-        <input id="chatApiKeyInput" type="password" placeholder="sk-..." autocomplete="off"
-          class="flex-1 rounded-lg bg-slate-800 border border-slate-600 text-slate-100 text-xs px-3 py-2 focus:outline-none focus:border-amber-500 placeholder-slate-600"/>
-        <button id="chatApiKeySave"
-          class="shrink-0 rounded-lg bg-amber-500/20 border border-amber-600/50 text-amber-300 text-xs font-semibold px-3 py-2 hover:bg-amber-500/30 transition">
-          Save
-        </button>
-      </div>
-    </div>
-
-    <!-- Messages -->
-    <div id="chatMessages" class="flex-1 overflow-y-auto p-4 space-y-3 bl-scroll">
-      <div class="flex gap-2.5">
-        <div class="w-6 h-6 rounded-full bg-amber-500/20 border border-amber-500/30 flex items-center justify-center shrink-0 mt-0.5">
-          <span class="text-amber-400 text-[10px]">🐝</span>
-        </div>
-        <div class="bg-slate-800/80 rounded-2xl rounded-tl-sm px-3 py-2 text-xs text-slate-300 max-w-[85%]">
-          Hi! I'm your BeeLinked assistant. Ask me anything about your yards, actions, hive counts, or signals. I can also navigate the map for you!
-        </div>
-      </div>
-    </div>
-
-    <!-- Input -->
-    <div class="shrink-0 flex gap-2 p-3 border-t border-slate-700/60 bg-slate-900/40">
-      <input id="chatInput" type="text" placeholder="Ask about your yards…"
-        class="flex-1 rounded-xl bg-slate-800 border border-slate-700 text-slate-100 text-xs px-3 py-2.5 focus:outline-none focus:border-amber-500/60 placeholder-slate-600 transition"/>
-      <button id="chatSendBtn"
-        class="shrink-0 w-9 h-9 rounded-xl bg-amber-500/20 border border-amber-600/50 text-amber-400 flex items-center justify-center hover:bg-amber-500/30 active:scale-95 transition">
-        <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"/>
-        </svg>
-      </button>
     </div>
   </div>
 
@@ -536,8 +448,16 @@
         <!-- Section 1: Yard Attributes -->
         <div class="rounded-xl border border-hive-border bg-hive-card/50 overflow-hidden">
           <div class="flex items-center gap-2 px-3 py-2 border-b border-hive-border bg-hive-card/60">
-            <svg class="w-3.5 h-3.5 text-amber-400 shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"/>
+            <svg width="14" height="18" viewBox="0 0 56 68" xmlns="http://www.w3.org/2000/svg" class="shrink-0">
+              <ellipse cx="28" cy="10" rx="9"  ry="3.2" fill="#fbbf24" stroke="#d97706" stroke-width="1"/>
+              <ellipse cx="28" cy="18" rx="15" ry="3.2" fill="#fbbf24" stroke="#d97706" stroke-width="1"/>
+              <ellipse cx="28" cy="26" rx="20" ry="3.2" fill="#fbbf24" stroke="#d97706" stroke-width="1"/>
+              <ellipse cx="28" cy="34" rx="23" ry="3.2" fill="#fbbf24" stroke="#d97706" stroke-width="1"/>
+              <ellipse cx="28" cy="42" rx="23" ry="3.2" fill="#fbbf24" stroke="#d97706" stroke-width="1"/>
+              <ellipse cx="28" cy="50" rx="21" ry="3.2" fill="#fbbf24" stroke="#d97706" stroke-width="1"/>
+              <ellipse cx="28" cy="57" rx="16" ry="3.2" fill="#fbbf24" stroke="#d97706" stroke-width="1"/>
+              <ellipse cx="28" cy="61" rx="16" ry="2"   fill="#d97706"/>
+              <ellipse cx="28" cy="56" rx="4.5" ry="2.8" fill="rgba(0,0,0,0.3)"/>
             </svg>
             <span class="text-[11px] font-semibold uppercase tracking-widest text-amber-400/80">Yard Attributes</span>
           </div>
@@ -567,13 +487,13 @@
         <!-- Section 3: Actions -->
         <div id="modalActionsWrap" class="rounded-xl border border-hive-border bg-hive-card/50 overflow-hidden">
           <div class="flex items-center gap-2 px-3 py-2 border-b border-hive-border bg-hive-card/60">
-            <svg class="w-3.5 h-3.5 text-emerald-400 shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <svg class="w-3.5 h-3.5 text-blue-400 shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"/>
             </svg>
-            <span class="text-[11px] font-semibold uppercase tracking-widest text-emerald-400/80">Actions</span>
+            <span class="text-[11px] font-semibold uppercase tracking-widest text-blue-400/80">Actions</span>
             <span id="modalActionsCount" class="text-[11px] text-hive-muted flex-1"></span>
             <button id="modalAddActionBtn" type="button"
-              class="flex items-center gap-1 rounded-md border border-emerald-700/60 bg-emerald-900/30 px-2 py-0.5 text-xs font-semibold text-emerald-300 hover:bg-emerald-800/40 hover:text-emerald-200 active:scale-95 transition">
+              class="flex items-center gap-1 rounded-md border border-blue-700/60 bg-blue-900/30 px-2 py-0.5 text-xs font-semibold text-blue-300 hover:bg-blue-800/40 hover:text-blue-200 active:scale-95 transition">
               <svg class="w-3 h-3" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/>
               </svg>
@@ -675,7 +595,7 @@
           type="search"
           placeholder="Search…"
           autocomplete="off"
-          class="w-40 sm:w-52 rounded-lg border border-hive-border bg-hive-card pl-8 pr-3 py-1.5 text-sm text-slate-100 placeholder-hive-muted focus:outline-none focus:ring-2 focus:ring-amber-500/50 focus:border-amber-500/50 transition"
+          class="w-40 sm:w-52 rounded-lg border border-hive-border pl-8 pr-3 py-1.5 text-sm text-slate-100 placeholder-hive-muted transition"
         />
       </div>
 
@@ -687,12 +607,8 @@
           <svg class="w-3 h-3 shrink-0 text-hive-muted" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/></svg>
         </button>
         <div id="filterStatusMenu"
-          class="lv-filter-menu hidden absolute top-full left-0 mt-1.5 z-50 min-w-[150px] rounded-xl border border-hive-border bg-hive-panel shadow-2xl overflow-hidden">
-          <button class="lv-filter-opt w-full text-left px-4 py-2.5 text-sm text-slate-300 hover:bg-hive-card hover:text-white transition" data-filter="status" data-val="">All Statuses</button>
-          <div class="border-t border-hive-border/60"></div>
-          <button class="lv-filter-opt w-full text-left px-4 py-2.5 text-sm text-slate-300 hover:bg-hive-card hover:text-white transition" data-filter="status" data-val="active">Active</button>
-          <button class="lv-filter-opt w-full text-left px-4 py-2.5 text-sm text-slate-300 hover:bg-hive-card hover:text-white transition" data-filter="status" data-val="attention">Attention</button>
-          <button class="lv-filter-opt w-full text-left px-4 py-2.5 text-sm text-slate-300 hover:bg-hive-card hover:text-white transition" data-filter="status" data-val="inactive">Inactive</button>
+          class="lv-filter-menu hidden absolute top-full left-0 mt-1.5 z-50 min-w-[180px] rounded-xl border border-hive-border bg-hive-panel shadow-2xl overflow-hidden">
+          <!-- populated dynamically by populateStatusFilterMenu() -->
         </div>
       </div>
 
@@ -765,7 +681,7 @@
       <!-- Desktop table (hidden on mobile) -->
       <div class="hidden sm:block min-w-full">
         <table class="w-full text-sm border-collapse">
-          <thead class="sticky top-0 z-10 bg-hive-panel border-b border-hive-border">
+          <thead class="sticky top-0 z-10 border-b border-hive-border">
             <tr id="lvTheadRow"><!-- built by JS --></tr>
           </thead>
           <tbody id="listViewTableBody"></tbody>
@@ -871,7 +787,7 @@
         <div id="newYardError" class="hidden bl-error"></div>
         <div class="flex gap-2 pt-1">
           <button id="newYardCancelBtn" type="button" class="bl-btn-ghost flex-1">Cancel</button>
-          <button id="newYardConfirmBtn" type="button" class="bl-btn-green flex-1">
+          <button id="newYardConfirmBtn" type="button" class="bl-btn-blue flex-1">
             <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/>
               <path stroke-linecap="round" stroke-linejoin="round" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"/>
@@ -887,8 +803,9 @@
   <div id="newActionModal"
     class="hidden fixed inset-0 z-[2000] flex items-end sm:items-center justify-center sm:p-4 bl-backdrop bg-black/60"
     role="dialog" aria-modal="true" aria-labelledby="newActionModalTitle">
-    <div class="bl-modal-sheet w-full sm:max-w-sm rounded-t-2xl sm:rounded-2xl border border-hive-border bg-hive-panel shadow-2xl">
-      <div class="flex items-center justify-between p-4 border-b border-hive-border">
+    <div class="bl-modal-sheet w-full sm:max-w-sm rounded-t-2xl sm:rounded-2xl border border-hive-border bg-hive-panel shadow-2xl flex flex-col max-h-[90dvh] sm:max-h-[85vh]">
+      <!-- Header (fixed) -->
+      <div class="flex items-center justify-between p-4 border-b border-hive-border flex-shrink-0">
         <h2 id="newActionModalTitle" class="text-base font-bold text-white">New Action</h2>
         <button id="newActionClose" type="button" aria-label="Close"
           class="p-2 rounded-lg text-hive-muted hover:bg-hive-bg hover:text-white transition">
@@ -897,7 +814,8 @@
           </svg>
         </button>
       </div>
-      <div class="p-4 space-y-4">
+      <!-- Scrollable body -->
+      <div class="p-4 space-y-4 overflow-y-auto flex-1">
         <div>
           <label class="bl-label" for="actionYardSelect">Yard</label>
           <select id="actionYardSelect" class="bl-input">
@@ -910,12 +828,20 @@
             <span class="font-normal normal-case text-hive-muted">(select one or more)</span>
           </label>
           <div id="actionTypePills" class="flex flex-wrap gap-2 mt-1.5">
-            <button type="button" class="action-pill" data-action="Inspecting colony condition">🔍 Inspecting colony</button>
-            <button type="button" class="action-pill" data-action="Feeding colonies">🍯 Feeding colonies</button>
-            <button type="button" class="action-pill" data-action="Treating pests">💊 Treating pests</button>
-            <button type="button" class="action-pill" data-action="Splitting colonies">✂️ Splitting colonies</button>
-            <button type="button" class="action-pill" data-action="Combining colonies">🔗 Combining colonies</button>
-            <button type="button" class="action-pill" data-action="Harvesting honey">🪣 Harvesting honey</button>
+            <button type="button" class="action-pill" data-action="Inspecting colony condition">Inspecting colony</button>
+            <button type="button" class="action-pill" data-action="Feeding colonies">Feeding colonies</button>
+            <button type="button" class="action-pill" data-action="Treating pests">Treating pests</button>
+            <button type="button" class="action-pill" data-action="Splitting colonies">Splitting colonies</button>
+            <button type="button" class="action-pill" data-action="Combining colonies">Combining colonies</button>
+            <button type="button" class="action-pill" data-action="Harvesting honey">Harvesting honey</button>
+            <button type="button" class="action-pill" data-action="__custom__">
+              <svg class="w-3 h-3 inline-block mr-1 -mt-0.5" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/></svg>Other…
+            </button>
+          </div>
+          <!-- Custom action input (shown when "Other" is selected) -->
+          <div id="customActionWrap" class="hidden mt-2">
+            <input id="customActionInput" type="text" placeholder="Describe the action…"
+              class="bl-input" maxlength="80" />
           </div>
           <p id="actionTypeError" class="hidden text-xs text-red-400 mt-1.5">Please select at least one action.</p>
         </div>
@@ -931,15 +857,16 @@
             class="bl-input resize-none"></textarea>
         </div>
         <div id="newActionError" class="hidden bl-error"></div>
-        <div class="flex gap-2 pt-1">
-          <button id="newActionCancelBtn" type="button" class="bl-btn-ghost flex-1">Cancel</button>
-          <button id="newActionSaveBtn" type="button" class="bl-btn-green flex-1">
-            <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/>
-            </svg>
-            Save Action
-          </button>
-        </div>
+      </div>
+      <!-- Footer buttons (fixed at bottom, always visible) -->
+      <div class="flex gap-2 p-4 border-t border-hive-border flex-shrink-0">
+        <button id="newActionCancelBtn" type="button" class="bl-btn-ghost flex-1">Cancel</button>
+        <button id="newActionSaveBtn" type="button" class="bl-btn-blue flex-1">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/>
+          </svg>
+          Save Action
+        </button>
       </div>
     </div>
   </div>

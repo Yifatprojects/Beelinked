@@ -3,6 +3,61 @@
    Hive yard field management · Supabase + Leaflet (Esri Satellite)
    ═══════════════════════════════════════════════════════════════════ */
 
+/* ── Custom tooltip engine ──────────────────────────────────────────── */
+(function () {
+  const tip = document.createElement('div');
+  tip.id = 'bl-tooltip';
+  document.body.appendChild(tip);
+
+  let hideTimer = null;
+
+  const show = (text, x, y) => {
+    clearTimeout(hideTimer);
+    tip.textContent = text;
+    // Position: prefer below, flip above if too close to bottom
+    const pad = 12;
+    let top  = y + pad;
+    let left = x + pad;
+    tip.classList.remove('visible');
+    tip.style.top  = top  + 'px';
+    tip.style.left = left + 'px';
+    // Force reflow then show
+    requestAnimationFrame(() => {
+      const r = tip.getBoundingClientRect();
+      if (r.right  > window.innerWidth  - 8) left = x - r.width  - pad;
+      if (r.bottom > window.innerHeight - 8) top  = y - r.height - pad;
+      tip.style.top  = Math.max(4, top)  + 'px';
+      tip.style.left = Math.max(4, left) + 'px';
+      tip.classList.add('visible');
+    });
+  };
+
+  const hide = () => {
+    tip.classList.remove('visible');
+  };
+
+  document.addEventListener('mouseover', (e) => {
+    const el = e.target.closest('[data-tip]');
+    if (!el) return;
+    show(el.dataset.tip, e.clientX, e.clientY);
+  });
+
+  document.addEventListener('mousemove', (e) => {
+    if (!tip.classList.contains('visible')) return;
+    const el = e.target.closest('[data-tip]');
+    if (!el) { hide(); return; }
+    show(el.dataset.tip, e.clientX, e.clientY);
+  });
+
+  document.addEventListener('mouseout', (e) => {
+    const el = e.target.closest('[data-tip]');
+    if (el) hide();
+  });
+
+  document.addEventListener('click', hide, true);
+  document.addEventListener('scroll', hide, true);
+})();
+
 (function () {
   'use strict';
 
@@ -88,7 +143,7 @@
   function onLocateError(err) {
     const denied = err && (err.code === 1 || err.code === err.PERMISSION_DENIED);
     if (_locateBtn) {
-      _locateBtn.title = denied
+      _locateBtn.dataset.tip = denied
         ? 'Location blocked — click to see how to enable it'
         : 'Unable to get location';
       _locateBtn.style.color  = '#f59e0b';
@@ -115,7 +170,7 @@
     options: { position: 'topleft' },
     onAdd() {
       const btn = L.DomUtil.create('button', '');
-      btn.title = 'Show my location';
+      btn.dataset.tip = 'Show my location';
       btn.style.cssText = `
         display:flex;align-items:center;justify-content:center;
         width:36px;height:36px;border-radius:8px;cursor:pointer;
@@ -137,6 +192,13 @@
           alert('Geolocation is not supported by your browser.');
           return;
         }
+
+        // If we already have a tracked position, pan immediately
+        if (_locMarker) {
+          map.setView(_locMarker.getLatLng(), Math.max(map.getZoom(), 15), { animate: true });
+          return;
+        }
+
         // Check if permission is already denied
         if (navigator.permissions) {
           navigator.permissions.query({ name: 'geolocation' }).then(result => {
@@ -153,18 +215,17 @@
             }
             navigator.geolocation.getCurrentPosition(pos => {
               updateMyLocation(pos);
-              map.setView([pos.coords.latitude, pos.coords.longitude], 15);
-              // Reset button to normal on success
+              map.setView([pos.coords.latitude, pos.coords.longitude], 15, { animate: true });
               btn.style.color  = '#3b82f6';
               btn.style.border = '2px solid #334155';
-              btn.title = 'Show my location';
+              btn.dataset.tip = 'Show my location';
               btn.innerHTML = `<svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path stroke-linecap="round" stroke-linejoin="round" d="M12 2v3m0 14v3M2 12h3m14 0h3"/><circle cx="12" cy="12" r="8" stroke-opacity=".35"/></svg>`;
             }, onLocateError, { enableHighAccuracy: true });
           });
         } else {
           navigator.geolocation.getCurrentPosition(pos => {
             updateMyLocation(pos);
-            map.setView([pos.coords.latitude, pos.coords.longitude], 15);
+            map.setView([pos.coords.latitude, pos.coords.longitude], 15, { animate: true });
           }, onLocateError, { enableHighAccuracy: true });
         }
       });
@@ -417,7 +478,7 @@
 
         const actionLabel = document.createElement('span');
         actionLabel.className = 'text-slate-400 text-xs truncate cursor-pointer hover:text-amber-300 underline underline-offset-2 decoration-dotted transition';
-        actionLabel.title = 'Click to reschedule';
+        actionLabel.dataset.tip = 'Click to reschedule';
         actionLabel.textContent = action.action_type ?? action.title ?? 'Action';
 
         // Hidden date input
@@ -545,16 +606,17 @@
      BEEHIVE SVG ICON
      ══════════════════════════════════════════════════════════════════ */
 
-  /** Colours for each marker kind */
+  /** Colours for each marker kind.
+   *  hollow:true  → bands use dark fill + white stroke (wireframe/ghost look)
+   *  glow:true    → SVG gets a white drop-shadow to signal an overdue action */
   const KIND_COLORS = {
-    //                        body fill    band colour    badge border
-    attention:      { fill: '#ef4444', band: '#b91c1c', badge: '#991b1b' },
-    planned:        { fill: '#22c55e', band: '#15803d', badge: '#14532d' },
-    planned_waiting:{ fill: '#22c55e', band: '#0f172a', badge: '#14532d' }, // green + black bands
-    done:           { fill: '#eab308', band: '#a16207', badge: '#a16207' },
-    done_waiting:   { fill: '#eab308', band: '#0f172a', badge: '#a16207' }, // yellow + black bands
-    placed_waiting: { fill: '#ffffff', band: '#0f172a', badge: '#64748b' }, // white + black bands
-    placed:         { fill: '#ffffff', band: '#cbd5e1', badge: '#64748b' },
+    attention:      { fill: '#ef4444', band: '#b91c1c', badge: '#991b1b', hollow: false, glow: false },
+    planned:        { fill: '#3b82f6', band: '#1d4ed8', badge: '#1e3a5f', hollow: false, glow: false },
+    planned_waiting:{ fill: '#3b82f6', band: '#1d4ed8', badge: '#1e3a5f', hollow: false, glow: true  },
+    done:           { fill: '#eab308', band: '#a16207', badge: '#a16207', hollow: false, glow: false },
+    done_waiting:   { fill: '#eab308', band: '#a16207', badge: '#a16207', hollow: false, glow: true  },
+    placed_waiting: { fill: null,      band: '#cbd5e1', badge: '#64748b', hollow: true,  glow: true  },
+    placed:         { fill: null,      band: '#cbd5e1', badge: '#64748b', hollow: true,  glow: false },
   };
 
   /** Maps kind → status string written to Supabase */
@@ -590,50 +652,57 @@
    * viewBox: 0 0 56 72   iconAnchor: bottom-center
    */
   function buildDivIcon(kind, yard) {
-    const c     = KIND_COLORS[kind] ?? KIND_COLORS.default;
+    const c     = KIND_COLORS[kind] ?? KIND_COLORS.placed;
     const count = yard?.hive_count ?? 0;
     const label = count > 0 ? String(count) : '?';
     const fSize = label.length >= 3 ? 7 : label.length === 2 ? 9 : 11;
 
-    // 8 bands — rx widens then narrows to create the dome silhouette
-    // ry=3.2 with 1px gap between bands (spacing = 7px centre-to-centre)
+    // Hollow: dark fill so map shows through, light stroke for wire-frame look
+    const bandFill   = c.hollow ? '#0f1929' : c.fill;
+    const bandStroke = c.band;
+    const strokeW    = c.hollow ? 1.5 : 1;
+
+    // Glow: white drop-shadow follows the SVG shape precisely
+    const glowStyle = c.glow
+      ? ' style="filter:drop-shadow(0 0 4px rgba(255,255,255,0.9)) drop-shadow(0 0 10px rgba(255,255,255,0.45));"'
+      : '';
+
     const BANDS = [
       { cy: 24, rx:  9 },
       { cy: 31, rx: 15 },
       { cy: 38, rx: 20 },
       { cy: 45, rx: 23 },
-      { cy: 52, rx: 23 },   // widest pair
+      { cy: 52, rx: 23 },
       { cy: 59, rx: 21 },
       { cy: 65, rx: 16 },
     ];
 
     const bandsSvg = BANDS.map(({ cy, rx }) =>
-      // Main band
-      `<ellipse cx="28" cy="${cy}" rx="${rx}" ry="3.2" fill="${c.fill}" stroke="${c.band}" stroke-width="1"/>` +
-      // Top-sheen highlight for the 3-D coil look
-      `<ellipse cx="28" cy="${cy - 1.2}" rx="${Math.round(rx * 0.55)}" ry="1.2" fill="rgba(255,255,255,0.25)"/>`
+      `<ellipse cx="28" cy="${cy}" rx="${rx}" ry="3.2" fill="${bandFill}" stroke="${bandStroke}" stroke-width="${strokeW}"/>` +
+      (c.hollow ? '' : `<ellipse cx="28" cy="${cy - 1.2}" rx="${Math.round(rx * 0.55)}" ry="1.2" fill="rgba(255,255,255,0.22)"/>`)
     ).join('');
 
-    const svg =
-      `<svg width="56" height="72" viewBox="0 0 56 72" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">` +
+    // Badge: hollow icons → semi-transparent fill + white ring; solid → white fill
+    const badgeFill   = c.hollow ? 'rgba(255,255,255,0.20)' : 'white';
+    const badgeStroke = c.hollow ? '#ffffff' : c.badge;
+    // Text: white on hollow (dark-map bg shows through), dark on solid
+    const textFill    = c.hollow ? '#ffffff' : '#0f172a';
+    const textStroke  = c.hollow ? ' paint-order="stroke" stroke="#0f172a" stroke-width="3" stroke-linejoin="round"' : '';
 
-      // ── Hive body bands ──────────────────────────────────────────────
+    const svg =
+      `<svg width="56" height="72" viewBox="0 0 56 72" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"${glowStyle}>` +
+
       bandsSvg +
 
-      // ── Flat base line ───────────────────────────────────────────────
-      `<ellipse cx="28" cy="68" rx="16" ry="2" fill="${c.band}"/>` +
+      `<ellipse cx="28" cy="68" rx="16" ry="2" fill="${bandStroke}" opacity="${c.hollow ? '0.5' : '1'}"/>` +
+      `<ellipse cx="28" cy="63" rx="4.5" ry="2.8" fill="${c.hollow ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.55)'}"/>` +
 
-      // ── Entrance hole ────────────────────────────────────────────────
-      `<ellipse cx="28" cy="63" rx="4.5" ry="2.8" fill="rgba(0,0,0,0.55)"/>` +
-
-      // ── Badge shadow + badge ─────────────────────────────────────────
       `<circle cx="29" cy="13" r="12" fill="rgba(0,0,0,0.18)"/>` +
-      `<circle cx="28" cy="12" r="12" fill="white" stroke="${c.badge}" stroke-width="3"/>` +
+      `<circle cx="28" cy="12" r="12" fill="${badgeFill}" stroke="${badgeStroke}" stroke-width="3"/>` +
 
-      // ── Count label ──────────────────────────────────────────────────
       `<text x="28" y="17" text-anchor="middle"` +
         ` font-family="system-ui,-apple-system,BlinkMacSystemFont,sans-serif"` +
-        ` font-size="${fSize}" font-weight="900" fill="#0f172a">${label}</text>` +
+        ` font-size="${fSize}" font-weight="900" fill="${textFill}"${textStroke}>${label}</text>` +
 
       `</svg>`;
 
@@ -660,24 +729,37 @@
   }
 
   function buildTooltipContent(yard) {
-    const lines = [`<strong>${yard.name ?? 'Yard'}</strong>`];
-    if (yard.apiaries?.name) lines.push(`🏠 ${yard.apiaries.name}`);
-    if (yard.location)       lines.push(`📍 ${yard.location}`);
+    const ic = (path, color = '#94a3b8') =>
+      `<svg style="display:inline-block;vertical-align:-2px;margin-right:4px;flex-shrink:0" width="11" height="11" fill="none" stroke="${color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24">${path}</svg>`;
+
+    const iconApiary  = ic('<path d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"/>');
+    const iconPin     = ic('<path d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/><path d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"/>');
+    const iconCal     = ic('<rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/>', '#93c5fd');
+    const iconAction  = ic('<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/>', '#93c5fd');
+
+    let html = `<strong style="color:#fff;font-size:0.82rem;display:block;margin-bottom:3px">${yard.name ?? 'Yard'}</strong>`;
+
+    if (yard.apiaries?.name) {
+      html += `<div style="display:flex;align-items:center;color:#94a3b8;font-size:0.74rem;margin-bottom:1px">${iconApiary}${yard.apiaries.name}</div>`;
+    }
+    if (yard.location) {
+      html += `<div style="display:flex;align-items:center;color:#94a3b8;font-size:0.74rem;margin-bottom:1px">${iconPin}${yard.location}</div>`;
+    }
 
     const now = new Date();
     const futureActions = (yard.actions ?? [])
-      .filter(a => a.action_date && new Date(a.action_date) > now)
+      .filter(a => a.action_date && new Date(a.action_date) > now && !a.is_done)
       .sort((a, b) => new Date(a.action_date) - new Date(b.action_date));
 
     if (futureActions.length) {
-      lines.push('<span style="color:#86efac;font-size:0.74rem;margin-top:2px;display:block">📅 Upcoming:</span>');
+      html += `<div style="color:#93c5fd;font-size:0.72rem;margin-top:5px;margin-bottom:2px;display:flex;align-items:center">${iconCal}<span style="font-weight:600;letter-spacing:0.04em">UPCOMING</span></div>`;
       futureActions.forEach(a => {
-        const d = new Date(a.action_date).toLocaleDateString(undefined, { day:'2-digit', month:'short', year:'numeric' });
-        lines.push(`&nbsp;&nbsp;• ${a.action_type ?? a.title ?? 'Action'} <span style="color:#94a3b8">(${d})</span>`);
+        const d = new Date(a.action_date).toLocaleDateString(undefined, { day:'2-digit', month:'short' });
+        html += `<div style="display:flex;align-items:center;font-size:0.74rem;color:#e2e8f0;margin-bottom:1px">${iconAction}${a.action_type ?? a.title ?? 'Action'}&nbsp;<span style="color:#64748b">${d}</span></div>`;
       });
     }
 
-    return lines.join('<br>');
+    return html;
   }
 
   function attachTooltip(marker) {
@@ -899,7 +981,7 @@
   }
 
   const ACTION_STATUS_STYLE = {
-    planned: { label: 'Planned',  cls: 'bg-green-900/60 text-green-300',   itemCls: 'action-future' },
+    planned: { label: 'Planned',  cls: 'bg-blue-500 text-white border border-white/20',     itemCls: 'action-future' },
     waiting: { label: 'Waiting',  cls: 'bg-orange-900/60 text-orange-300', itemCls: 'action-past'   },
     done:    { label: 'Done',     cls: 'bg-slate-700/80 text-slate-400',   itemCls: 'action-done'   },
   };
@@ -933,11 +1015,11 @@
     // Mark-done button (hidden for already-done actions)
     const doneBtn = document.createElement('button');
     doneBtn.type = 'button';
-    doneBtn.title = 'Mark as done';
+    doneBtn.dataset.tip = 'Mark as done';
     doneBtn.className = `shrink-0 p-1 rounded-md transition active:scale-90 ${
       status === 'done'
         ? 'hidden'
-        : 'text-slate-500 hover:text-emerald-400 hover:bg-emerald-900/20'
+        : 'text-slate-500 hover:text-blue-400 hover:bg-blue-900/20'
     }`;
     doneBtn.innerHTML = `<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
       <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/>
@@ -967,7 +1049,7 @@
     // Delete button
     const delBtn = document.createElement('button');
     delBtn.type = 'button';
-    delBtn.title = 'Delete this action';
+    delBtn.dataset.tip = 'Delete this action';
     delBtn.className = 'shrink-0 p-1 rounded-md text-slate-500 hover:text-red-400 hover:bg-red-900/20 active:scale-90 transition';
     delBtn.innerHTML = `<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24">
       <path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6M1 7h22M8 7V4a1 1 0 011-1h6a1 1 0 011 1v3"/>
@@ -976,13 +1058,13 @@
     delBtn.addEventListener('click', async () => {
       if (!delBtn.dataset.confirm) {
         delBtn.dataset.confirm = '1';
-        delBtn.title = 'Click again to confirm delete';
+        delBtn.dataset.tip = 'Click again to confirm delete';
         delBtn.className = 'shrink-0 px-2 py-0.5 rounded-md text-[11px] font-semibold text-red-400 border border-red-700 bg-red-900/30 hover:bg-red-800/50 active:scale-90 transition';
         delBtn.textContent = 'Confirm';
         setTimeout(() => {
           if (delBtn.dataset.confirm) {
             delete delBtn.dataset.confirm;
-            delBtn.title = 'Delete this action';
+            delBtn.dataset.tip = 'Delete this action';
             delBtn.className = 'shrink-0 p-1 rounded-md text-slate-500 hover:text-red-400 hover:bg-red-900/20 active:scale-90 transition';
             delBtn.innerHTML = `<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6M1 7h22M8 7V4a1 1 0 011-1h6a1 1 0 011 1v3"/></svg>`;
           }
@@ -1058,16 +1140,16 @@
 
     const btn = document.createElement('button');
     btn.type = 'button';
-    btn.title = 'Relocate this yard on the map';
-    btn.className = 'shrink-0 flex items-center justify-center text-emerald-400 hover:text-emerald-300 w-7 h-7 rounded-md hover:bg-emerald-900/30 active:scale-95 transition';
+    btn.dataset.tip = 'Relocate this yard on the map';
+    btn.className = 'shrink-0 flex items-center justify-center text-amber-400 hover:text-amber-300 w-7 h-7 rounded-md hover:bg-amber-900/30 active:scale-95 transition';
     btn.innerHTML = `<svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/><path stroke-linecap="round" stroke-linejoin="round" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"/></svg>`;
     btn.addEventListener('click', () => startRelocate(yard));
 
     // Navigate button
     const navBtn = document.createElement('button');
     navBtn.type = 'button';
-    navBtn.title = 'Navigate to this yard';
-    navBtn.className = 'shrink-0 flex items-center justify-center text-sky-400 hover:text-sky-300 w-7 h-7 rounded-md hover:bg-sky-900/30 active:scale-95 transition';
+    navBtn.dataset.tip = 'Navigate to this yard';
+    navBtn.className = 'shrink-0 flex items-center justify-center text-amber-400 hover:text-amber-300 w-7 h-7 rounded-md hover:bg-amber-900/30 active:scale-95 transition';
     navBtn.innerHTML = `<svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-1.447-.894L15 9m0 8V9m0 0L9 7"/></svg>`;
 
     navBtn.addEventListener('click', () => {
@@ -1594,7 +1676,7 @@
       const hasFilter = _mapApiaryFilter !== 'all';
       pills.classList.toggle('hidden', collapsed);
       chevron.style.transform = collapsed ? 'rotate(180deg)' : '';
-      toggle.title = collapsed ? 'Show apiary filter' : 'Hide apiary filter';
+      toggle.dataset.tip = collapsed ? 'Show apiary filter' : 'Hide apiary filter';
       localStorage.setItem('bl_apiary_filter_collapsed', collapsed ? '1' : '0');
 
       // Yellow outline when collapsed + active filter
@@ -1766,12 +1848,14 @@
 
   /* ── UI controls ─────────────────────────────────────────────────── */
 
-  document.getElementById('legendToggle').addEventListener('click', () => {
+  function toggleLegend() {
     const panel = document.getElementById('legendPanel');
     const btn   = document.getElementById('legendToggle');
     const nowHidden = panel.classList.toggle('hidden');
     btn.setAttribute('aria-expanded', String(!nowHidden));
-  });
+  }
+  document.getElementById('legendToggle').addEventListener('click', toggleLegend);
+  document.getElementById('legendToggleMobile').addEventListener('click', toggleLegend);
 
   document.getElementById('refreshBtn').addEventListener('click', loadYards);
 
@@ -1796,9 +1880,9 @@
     setFab(!fabIsOpen);
   });
 
-  // Close FAB when clicking anywhere outside it
+  // Close FAB dropdown when clicking anywhere outside it
   document.addEventListener('click', (e) => {
-    if (fabIsOpen && !document.getElementById('fabWrap').contains(e.target)) {
+    if (fabIsOpen && !document.getElementById('headerFabWrap').contains(e.target)) {
       setFab(false);
     }
   });
@@ -1861,6 +1945,50 @@
     document.getElementById('mapClickBanner').classList.add('hidden');
     document.getElementById('mapClickOverlay').classList.add('hidden');
   }
+
+  // Forward wheel + touch-pinch events from the overlay to the map so
+  // the user can still zoom while in relocate / new-yard click mode
+  ;(function allowZoomThroughOverlay() {
+    const overlay  = document.getElementById('mapClickOverlay');
+    const mapEl    = document.getElementById('map');
+
+    overlay.addEventListener('wheel', (e) => {
+      e.stopPropagation();
+      mapEl.dispatchEvent(new WheelEvent('wheel', {
+        bubbles: true, cancelable: true,
+        deltaX: e.deltaX, deltaY: e.deltaY, deltaZ: e.deltaZ,
+        deltaMode: e.deltaMode,
+        clientX: e.clientX, clientY: e.clientY,
+        ctrlKey: e.ctrlKey, shiftKey: e.shiftKey, altKey: e.altKey,
+      }));
+    }, { passive: true });
+
+    let _touchStartDist = null;
+    overlay.addEventListener('touchstart', (e) => {
+      if (e.touches.length === 2) {
+        const dx = e.touches[0].clientX - e.touches[1].clientX;
+        const dy = e.touches[0].clientY - e.touches[1].clientY;
+        _touchStartDist = Math.hypot(dx, dy);
+      }
+    }, { passive: true });
+
+    overlay.addEventListener('touchmove', (e) => {
+      if (e.touches.length !== 2 || _touchStartDist === null) return;
+      const dx   = e.touches[0].clientX - e.touches[1].clientX;
+      const dy   = e.touches[0].clientY - e.touches[1].clientY;
+      const dist = Math.hypot(dx, dy);
+      const scale = dist / _touchStartDist;
+      _touchStartDist = dist;
+      const cx = (e.touches[0].clientX + e.touches[1].clientX) / 2;
+      const cy = (e.touches[0].clientY + e.touches[1].clientY) / 2;
+      const center = map.containerPointToLatLng(
+        map.mouseEventToContainerPoint({ clientX: cx, clientY: cy })
+      );
+      map.setZoomAround(center, map.getZoom() + Math.log2(scale));
+    }, { passive: true });
+
+    overlay.addEventListener('touchend', () => { _touchStartDist = null; }, { passive: true });
+  })();
 
   async function startRelocate(yard) {
     closeModal();
@@ -1998,6 +2126,13 @@
     pill.addEventListener('click', () => {
       pill.classList.toggle('selected');
       document.getElementById('actionTypeError').classList.add('hidden');
+      // Show/hide custom input when "Other…" is toggled
+      const customWrap = document.getElementById('customActionWrap');
+      const customInput = document.getElementById('customActionInput');
+      const isCustomSelected = document.querySelector('.action-pill[data-action="__custom__"]')?.classList.contains('selected');
+      customWrap.classList.toggle('hidden', !isCustomSelected);
+      if (isCustomSelected) customInput.focus();
+      else customInput.value = '';
     });
   });
 
@@ -2021,9 +2156,11 @@
         sel.appendChild(opt);
       });
 
-    // Deselect all pills
+    // Deselect all pills and reset custom input
     document.querySelectorAll('.action-pill').forEach((p) => p.classList.remove('selected'));
     document.getElementById('actionTypeError').classList.add('hidden');
+    document.getElementById('customActionWrap').classList.add('hidden');
+    document.getElementById('customActionInput').value = '';
 
     // Default date = today
     document.getElementById('actionDate').value  = new Date().toISOString().slice(0, 10);
@@ -2045,9 +2182,11 @@
     const notes   = document.getElementById('actionNotes').value.trim();
     const errEl   = document.getElementById('newActionError');
 
-    // Collect selected action types
+    // Collect selected action types, resolving "Other…" to the custom text
+    const customText = document.getElementById('customActionInput').value.trim();
     const selectedTitles = [...document.querySelectorAll('.action-pill.selected')]
-      .map((p) => p.dataset.action);
+      .map((p) => p.dataset.action === '__custom__' ? customText : p.dataset.action)
+      .filter(Boolean);
 
     if (!yardId) {
       errEl.textContent = 'Please select a yard.';
@@ -2056,6 +2195,14 @@
     }
     if (selectedTitles.length === 0) {
       document.getElementById('actionTypeError').classList.remove('hidden');
+      return;
+    }
+    // Validate custom action has text if "Other…" is selected
+    const isCustomSelected = document.querySelector('.action-pill[data-action="__custom__"]')?.classList.contains('selected');
+    if (isCustomSelected && !customText) {
+      errEl.textContent = 'Please describe your custom action.';
+      errEl.classList.remove('hidden');
+      document.getElementById('customActionInput').focus();
       return;
     }
     if (!dateVal) {
@@ -2137,12 +2284,65 @@
      Export to Excel (SheetJS) · Share via Web Share API / clipboard.
      ══════════════════════════════════════════════════════════════════ */
 
-  const STATUS_LABEL = { attention: 'Attention', active: 'Active', inactive: 'Inactive' };
-  const STATUS_CSS   = {
-    attention: 'bg-red-900/60 text-red-300 border-red-700',
-    active:    'bg-emerald-900/50 text-emerald-300 border-emerald-700',
-    inactive:  'bg-slate-700/60 text-slate-400 border-slate-600',
+  const STATUS_LABEL = {
+    attention: 'Needs Attention',
+    planned:   'Action Planned',
+    done:      'Actions Done',
+    waiting:   'Action Waiting',
+    placed:    'Placed',
   };
+  /** Pill CSS per kind — used in table + mobile cards */
+  const KIND_PILL_CSS = {
+    attention:      'bg-red-900/60 text-red-300 border-red-700',
+    planned:        'bg-blue-900/50 text-blue-300 border-blue-600',
+    planned_waiting:'bg-blue-900/50 text-blue-300 border-blue-600 lv-pill-glow',
+    done:           'bg-yellow-900/50 text-yellow-300 border-yellow-700',
+    done_waiting:   'bg-yellow-900/50 text-yellow-300 border-yellow-700 lv-pill-glow',
+    placed_waiting: 'lv-pill-hollow lv-pill-glow',
+    placed:         'lv-pill-hollow',
+  };
+
+  /** Tiny inline beehive SVG for pills/menus — accepts a KIND key */
+  function statusHiveIconByKind(kind) {
+    const c          = KIND_COLORS[kind] ?? KIND_COLORS.placed;
+    const bandFill   = c.hollow ? '#0f1929' : c.fill;
+    const bandStroke = c.band;
+    const strokeW    = c.hollow ? 0.9 : 0.6;
+    const glowStyle  = c.glow
+      ? 'filter:drop-shadow(0 0 2px rgba(255,255,255,0.9)) drop-shadow(0 0 5px rgba(255,255,255,0.5));'
+      : '';
+    const BANDS = [
+      { cy: 5,  rx: 4   },
+      { cy: 8,  rx: 6.5 },
+      { cy: 11, rx: 8.5 },
+      { cy: 14, rx: 9.5 },
+      { cy: 17, rx: 9.5 },
+      { cy: 20, rx: 8.5 },
+      { cy: 23, rx: 6.5 },
+    ];
+    const bands = BANDS.map(({ cy, rx }) =>
+      `<ellipse cx="12" cy="${cy}" rx="${rx}" ry="1.4" fill="${bandFill}" stroke="${bandStroke}" stroke-width="${strokeW}"/>`
+    ).join('');
+    return (
+      `<svg width="16" height="28" viewBox="0 0 24 28" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" style="display:inline-block;flex-shrink:0;${glowStyle}">` +
+      bands +
+      `<ellipse cx="12" cy="26" rx="6.5" ry="1" fill="${bandStroke}" opacity="${c.hollow ? '0.5' : '1'}"/>` +
+      `<ellipse cx="12" cy="24" rx="2"   ry="1.2" fill="${c.hollow ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.55)'}"/>` +
+      `</svg>`
+    );
+  }
+
+  /** Backwards-compat wrapper used by the status filter menu (DB status → kind) */
+  function statusHiveIcon(status) {
+    const STATUS_TO_KIND = {
+      attention: 'attention', planned: 'planned',
+      done: 'done', waiting: 'placed_waiting', placed: 'placed',
+    };
+    return statusHiveIconByKind(STATUS_TO_KIND[status] ?? 'placed');
+  }
+
+  // Keep STATUS_CSS as alias so any residual references don't break
+  const STATUS_CSS = KIND_PILL_CSS;
 
   /* ── Column definitions ──────────────────────────────────────── */
   const COL_DEFS = {
@@ -2152,7 +2352,7 @@
     },
     location: {
       label: 'Location', sortKey: 'location',
-      renderTd: (y) => `<td class="px-4 py-3 text-center text-slate-300">${y.location ?? '—'}</td>`,
+      renderTd: (y) => `<td class="px-4 py-3 text-center text-slate-300">${y.location ? y.location : '<span class="lv-empty">—</span>'}</td>`,
     },
     hives: {
       label: 'Hives', sortKey: 'hives',
@@ -2161,27 +2361,36 @@
     status: {
       label: 'Status', sortKey: 'status',
       renderTd: (y) => {
-        const css = STATUS_CSS[y.status] ?? STATUS_CSS.active;
-        const lbl = STATUS_LABEL[y.status] ?? (y.status ?? 'Active');
-        return `<td class="px-4 py-3 text-center"><span class="inline-flex items-center justify-center text-[11px] font-semibold px-2 py-0.5 rounded-full border ${css}">${lbl}</span></td>`;
+        const kind = resolveMarkerKind(y);
+        const css  = KIND_PILL_CSS[kind] ?? KIND_PILL_CSS.placed;
+        const lbl  = KIND_META[kind]?.text ?? 'Placed';
+        const icon = statusHiveIconByKind(kind);
+        const attCls = kind === 'attention' ? ' lv-status-attention' : '';
+        return `<td class="px-4 py-3 text-center">
+          <span class="inline-flex items-center gap-1.5 text-[11px] font-semibold px-2 py-0.5 rounded-full border ${css}${attCls}">
+            ${icon}${lbl}
+          </span></td>`;
       },
     },
     seen: {
       label: 'Last Seen', sortKey: 'seen',
-      renderTd: (y) => `<td class="px-4 py-3 text-center text-slate-300 text-xs whitespace-nowrap">${fmt(y.last_seen_at)}</td>`,
+      renderTd: (y) => {
+        const val = fmt(y.last_seen_at);
+        return `<td class="px-4 py-3 text-center text-xs whitespace-nowrap">${val ? `<span class="text-slate-300">${val}</span>` : '<span class="lv-empty">—</span>'}</td>`;
+      },
     },
     actions: {
       label: 'Actions', sortKey: null,
       renderTd: (y, upcoming, past) => `<td class="px-4 py-3 text-center">
         <div class="flex flex-wrap justify-center gap-1">
-          ${upcoming.length ? `<span class="text-[11px] font-semibold px-1.5 py-0.5 rounded-full bg-green-900/50 text-green-300 border border-green-700">${upcoming.length} upcoming</span>` : ''}
-          ${past.length     ? `<span class="text-[11px] font-semibold px-1.5 py-0.5 rounded-full bg-yellow-900/40 text-yellow-300 border border-yellow-700">${past.length} past</span>` : ''}
-          ${!upcoming.length && !past.length ? `<span class="text-[11px] text-hive-muted">None</span>` : ''}
+          ${upcoming.length ? `<span class="lv-badge lv-badge-upcoming">${upcoming.length} upcoming</span>` : ''}
+          ${past.length     ? `<span class="lv-badge lv-badge-past">${past.length} past</span>` : ''}
+          ${!upcoming.length && !past.length ? `<span class="lv-empty text-[11px]">None</span>` : ''}
         </div></td>`,
     },
     apiary: {
       label: 'Apiary', sortKey: 'apiary',
-      renderTd: (y) => `<td class="px-4 py-3 text-center text-slate-300">${y.apiaries?.name ?? '—'}</td>`,
+      renderTd: (y) => `<td class="px-4 py-3 text-center">${y.apiaries?.name ? `<span class="text-slate-300">${y.apiaries.name}</span>` : '<span class="lv-empty">—</span>'}</td>`,
     },
     mapview: {
       label: 'Map View', sortKey: null,
@@ -2227,24 +2436,24 @@
 
     // Fixed # column
     const thIdx = document.createElement('th');
-    thIdx.className = 'text-center px-4 py-3 text-[11px] uppercase tracking-widest text-hive-muted font-semibold w-8 select-none';
+    thIdx.className = 'text-center px-4 py-3 w-8 select-none';
     thIdx.textContent = '#';
     row.appendChild(thIdx);
 
     _colOrder.forEach((key, colIdx) => {
       const def      = COL_DEFS[key];
       const isActive = !!def.sortKey && def.sortKey === _sortCol;
+      const arrowSym = isActive ? (_sortDir === 'asc' ? '↑' : '↓') : '↕';
       const arrow    = def.sortKey
-        ? `<span class="ml-0.5 ${isActive ? 'text-amber-400' : 'opacity-40'}">${isActive ? (_sortDir === 'asc' ? '↑' : '↓') : '↕'}</span>`
+        ? `<span class="sort-arrow ml-0.5 ${isActive ? 'active' : ''}">${arrowSym}</span>`
         : '';
       const alignCls = key === 'name' ? 'text-left' : 'text-center';
 
       const th = document.createElement('th');
       th.className = [
         alignCls,
-        'px-4 py-3 text-[11px] uppercase tracking-widest font-semibold',
+        'px-4 py-3 uppercase',
         'cursor-grab select-none transition-colors group',
-        isActive ? 'text-white' : 'text-hive-muted',
         def.sortKey ? 'hover:text-white' : '',
       ].filter(Boolean).join(' ');
       th.draggable  = true;
@@ -2316,7 +2525,45 @@
   let _filterDateFrom   = '';   // ISO date string e.g. '2025-01-01'
   let _filterDateTo     = '';
 
-  const STATUS_FILTER_LABELS = { '': 'Status', active: 'Active', attention: 'Attention', inactive: 'Inactive' };
+  const STATUS_FILTER_LABELS = {
+    '':        'Status',
+    attention: 'Needs Attention',
+    planned:   'Action Planned',
+    done:      'Actions Done',
+    waiting:   'Action Waiting',
+    placed:    'Placed',
+  };
+
+  /* Build the Status filter menu with inline hive icons */
+  function populateStatusFilterMenu() {
+    const menu = document.getElementById('filterStatusMenu');
+    menu.innerHTML = '';
+
+    const STATUS_ORDER = ['attention', 'planned', 'done', 'waiting', 'placed'];
+
+    const makeOpt = (label, val, icon = '') => {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'lv-filter-opt w-full text-left px-4 py-2.5 text-sm text-slate-300 hover:bg-hive-card hover:text-white transition';
+      btn.dataset.filter = 'status';
+      btn.dataset.val    = val;
+      if (icon) {
+        btn.innerHTML = `<span class="inline-flex items-center gap-2">${icon}<span>${label}</span></span>`;
+      } else {
+        btn.textContent = label;
+      }
+      return btn;
+    };
+
+    menu.appendChild(makeOpt('All Statuses', ''));
+    const div = document.createElement('div');
+    div.className = 'border-t border-hive-border/60';
+    menu.appendChild(div);
+
+    STATUS_ORDER.forEach((val) => {
+      menu.appendChild(makeOpt(STATUS_LABEL[val], val, statusHiveIcon(val)));
+    });
+  }
 
   /* Build the Actions filter menu from live Supabase data */
   function populateApiaryFilterMenu() {
@@ -2343,17 +2590,29 @@
     }
   }
 
+  const PREDEFINED_ACTION_TYPES = new Set([
+    'Inspecting colony condition',
+    'Feeding colonies',
+    'Treating pests',
+    'Splitting colonies',
+    'Combining colonies',
+    'Harvesting honey',
+  ]);
+
   function populateActionsFilterMenu() {
     const menu = document.getElementById('filterActionsMenu');
     menu.innerHTML = '';
 
-    // Collect all unique action types across all yards
-    const types = new Set();
+    // Separate predefined vs custom action types
+    const predefined = new Set();
+    const custom     = new Set();
     yardMarkers.forEach((m) => {
       const acts = Array.isArray(m._yard?.actions) ? m._yard.actions : [];
       acts.forEach((a) => {
         const label = (a.title || a.action_type || '').trim();
-        if (label) types.add(label);
+        if (!label) return;
+        if (PREDEFINED_ACTION_TYPES.has(label)) predefined.add(label);
+        else custom.add(label);
       });
     });
 
@@ -2366,18 +2625,34 @@
       btn.textContent    = label;
       return btn;
     };
+    const makeDivider = () => {
+      const d = document.createElement('div');
+      d.className = 'border-t border-hive-border/60';
+      return d;
+    };
 
     menu.appendChild(makeOpt('All Action Types', ''));
-    const div1 = document.createElement('div');
-    div1.className = 'border-t border-hive-border/60';
-    menu.appendChild(div1);
+    menu.appendChild(makeDivider());
     menu.appendChild(makeOpt('No Actions', 'none'));
 
-    if (types.size > 0) {
-      const div2 = document.createElement('div');
-      div2.className = 'border-t border-hive-border/60';
-      menu.appendChild(div2);
-      [...types].sort().forEach((t) => menu.appendChild(makeOpt(t, t)));
+    // Predefined action types (only those that exist in the data)
+    if (predefined.size > 0) {
+      menu.appendChild(makeDivider());
+      [...predefined].sort().forEach((t) => menu.appendChild(makeOpt(t, t)));
+    }
+
+    // Custom / manually entered actions grouped under "Other"
+    if (custom.size > 0) {
+      menu.appendChild(makeDivider());
+      // Sentinel option that matches any custom action
+      menu.appendChild(makeOpt('Other (manual)', '__other__'));
+      // Individual custom actions as sub-options
+      [...custom].sort().forEach((t) => {
+        const btn = makeOpt(`  ${t}`, t);
+        btn.style.paddingLeft = '2rem';
+        btn.classList.add('text-xs', 'text-slate-400');
+        menu.appendChild(btn);
+      });
     }
   }
 
@@ -2391,19 +2666,16 @@
     // Status button
     const sBtn = document.getElementById('filterStatusBtn');
     document.getElementById('filterStatusLabel').textContent = STATUS_FILTER_LABELS[_filterStatus] ?? 'Status';
-    sBtn.classList.toggle('border-amber-500/70', hasStatus);
-    sBtn.classList.toggle('text-amber-300',      hasStatus);
-    sBtn.classList.toggle('bg-amber-900/20',     hasStatus);
+    sBtn.classList.toggle('lv-active', hasStatus);
 
     // Action Type button
     const aBtn = document.getElementById('filterActionsBtn');
-    const aLabel = _filterActionType === ''     ? 'Action Type'
-                 : _filterActionType === 'none' ? 'No Actions'
+    const aLabel = _filterActionType === ''        ? 'Action Type'
+                 : _filterActionType === 'none'    ? 'No Actions'
+                 : _filterActionType === '__other__' ? 'Other (manual)'
                  : _filterActionType;
     document.getElementById('filterActionsLabel').textContent = aLabel;
-    aBtn.classList.toggle('border-amber-500/70', hasAction);
-    aBtn.classList.toggle('text-amber-300',      hasAction);
-    aBtn.classList.toggle('bg-amber-900/20',     hasAction);
+    aBtn.classList.toggle('lv-active', hasAction);
 
     // Apiary button
     const apBtn   = document.getElementById('filterApiaryBtn');
@@ -2411,9 +2683,7 @@
       ? (_apiaries.find((a) => String(a.id) === _filterApiary)?.name ?? 'Apiary')
       : 'Apiary';
     document.getElementById('filterApiaryLabel').textContent = apLabel;
-    apBtn.classList.toggle('border-amber-500/70', hasApiary);
-    apBtn.classList.toggle('text-amber-300',      hasApiary);
-    apBtn.classList.toggle('bg-amber-900/20',     hasApiary);
+    apBtn.classList.toggle('lv-active', hasApiary);
 
     // Date button
     const dBtn = document.getElementById('filterDateBtn');
@@ -2422,9 +2692,7 @@
     else if (_filterDateFrom)             dLabel = `From ${_filterDateFrom}`;
     else if (_filterDateTo)               dLabel = `Until ${_filterDateTo}`;
     document.getElementById('filterDateLabel').textContent = dLabel;
-    dBtn.classList.toggle('border-amber-500/70', hasDate);
-    dBtn.classList.toggle('text-amber-300',      hasDate);
-    dBtn.classList.toggle('bg-amber-900/20',     hasDate);
+    dBtn.classList.toggle('lv-active', hasDate);
 
     // Clear button
     document.getElementById('listViewClearFilters').classList.toggle('hidden', !hasAny);
@@ -2503,7 +2771,14 @@
       // Action type filter
       const acts = Array.isArray(y.actions) ? y.actions : [];
       if (_filterActionType === 'none' && acts.length > 0) return false;
-      if (_filterActionType && _filterActionType !== 'none') {
+      if (_filterActionType === '__other__') {
+        // Match yards that have at least one custom (non-predefined) action
+        const hasCustom = acts.some((a) => {
+          const label = (a.title || a.action_type || '').trim();
+          return label && !PREDEFINED_ACTION_TYPES.has(label);
+        });
+        if (!hasCustom) return false;
+      } else if (_filterActionType && _filterActionType !== 'none') {
         const hasType = acts.some((a) =>
           (a.title || a.action_type || '').trim() === _filterActionType
         );
@@ -2555,8 +2830,8 @@
 
       // Main yard row — columns rendered in current _colOrder
       const tr = document.createElement('tr');
-      tr.className = 'border-b border-hive-border hover:bg-hive-card/60 cursor-pointer transition group';
-      let rowHtml = `<td class="px-4 py-3 text-center text-hive-muted text-xs">${idx + 1}</td>`;
+      tr.className = 'border-b border-hive-border hover:bg-white/5 cursor-pointer transition group';
+      let rowHtml = `<td class="px-4 py-3 text-center text-xs lv-empty">${idx + 1}</td>`;
       _colOrder.forEach((key) => { rowHtml += COL_DEFS[key].renderTd(yard, upcoming, past); });
       tr.innerHTML = rowHtml;
 
@@ -2580,15 +2855,15 @@
           .forEach((action) => {
             const isFuture = action.action_date && new Date(action.action_date) > now;
             const atr = document.createElement('tr');
-            atr.className = 'border-b border-hive-border/50 bg-hive-card/20 hover:bg-hive-card/40 transition';
+            atr.className = 'lv-action-row border-b border-hive-border/40 bg-hive-card/15 hover:bg-white/5 transition';
             atr.innerHTML = `
-              <td class="px-4 py-2 text-center text-hive-muted text-xs">↳</td>
+              <td class="px-4 py-2 text-center lv-empty text-xs">↳</td>
               <td class="px-4 py-2" colspan="${_colOrder.length}">
                 <div class="flex items-center gap-3 text-xs">
-                  <span class="text-slate-300 font-medium">${action.title || action.action_type || 'Action'}</span>
-                  ${action.notes ? `<span class="text-hive-muted">· ${action.notes}</span>` : ''}
-                  <span class="ml-auto shrink-0 px-1.5 py-0.5 rounded-full font-semibold ${isFuture ? 'bg-green-900/40 text-green-300' : 'bg-yellow-900/30 text-yellow-300'}">${isFuture ? 'Upcoming' : 'Past'}</span>
-                  <span class="shrink-0 text-slate-400">${action.action_date ? fmtDate(action.action_date) : '—'}</span>
+                  <span class="lv-action-name font-medium">${action.title || action.action_type || 'Action'}</span>
+                  ${action.notes ? `<span class="lv-empty">· ${action.notes}</span>` : ''}
+                  <span class="ml-auto shrink-0 lv-badge ${isFuture ? 'lv-badge-upcoming' : 'lv-badge-past'}">${isFuture ? 'Upcoming' : 'Past'}</span>
+                  <span class="shrink-0 lv-empty">${action.action_date ? fmtDate(action.action_date) : '—'}</span>
                 </div>
               </td>`;
             tbody.appendChild(atr);
@@ -2608,8 +2883,11 @@
       const actions  = Array.isArray(yard.actions) ? yard.actions : [];
       const upcoming = actions.filter((a) => a.action_date && new Date(a.action_date) > now);
       const past     = actions.filter((a) => !a.action_date || new Date(a.action_date) <= now);
-      const statusCss = STATUS_CSS[yard.status] ?? STATUS_CSS.active;
-      const statusLbl = STATUS_LABEL[yard.status] ?? (yard.status ?? 'Active');
+      const yKind     = resolveMarkerKind(yard);
+      const statusCss = KIND_PILL_CSS[yKind] ?? KIND_PILL_CSS.placed;
+      const statusLbl = KIND_META[yKind]?.text ?? 'Placed';
+      const statusIcon = statusHiveIconByKind(yKind);
+      const attCls    = yKind === 'attention' ? ' lv-status-attention' : '';
 
       const card = document.createElement('div');
       card.className = 'px-4 py-4 hover:bg-hive-card/40 active:bg-hive-card/60 cursor-pointer transition';
@@ -2619,12 +2897,12 @@
             <p class="font-semibold text-white text-sm truncate">${yard.name ?? '—'}</p>
             <p class="text-xs text-hive-muted truncate">${yard.location ?? 'No location'}</p>
           </div>
-          <span class="shrink-0 inline-flex items-center text-[11px] font-semibold px-2 py-0.5 rounded-full border ${statusCss}">${statusLbl}</span>
+          <span class="shrink-0 inline-flex items-center gap-1.5 text-[11px] font-semibold px-2 py-0.5 rounded-full border ${statusCss}${attCls}">${statusIcon}${statusLbl}</span>
         </div>
         <div class="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-400">
-          <span>🐝 ${yard.hive_count ?? 0} hives</span>
+          <span class="inline-flex items-center gap-1"><svg width="11" height="11" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path d="M12 2C6.477 2 2 6.477 2 12s4.477 10 10 10 10-4.477 10-10S17.523 2 12 2z"/><path d="M12 8v4l3 3"/></svg>${yard.hive_count ?? 0} hives</span>
           <span>Seen: ${fmt(yard.last_seen_at)}</span>
-          ${upcoming.length ? `<span class="text-green-400">${upcoming.length} upcoming action${upcoming.length > 1 ? 's' : ''}</span>` : ''}
+          ${upcoming.length ? `<span class="text-blue-400">${upcoming.length} upcoming action${upcoming.length > 1 ? 's' : ''}</span>` : ''}
           ${past.length    ? `<span class="text-yellow-400">${past.length} past action${past.length > 1 ? 's' : ''}</span>` : ''}
         </div>
         ${actions.length ? `
@@ -2635,7 +2913,7 @@
             .map((a) => {
               const isFut = a.action_date && new Date(a.action_date) > now;
               return `<div class="flex items-center gap-2 text-[11px]">
-                <span class="shrink-0 w-1.5 h-1.5 rounded-full ${isFut ? 'bg-green-400' : 'bg-yellow-400'}"></span>
+                <span class="shrink-0 w-1.5 h-1.5 rounded-full ${isFut ? 'bg-blue-400' : 'bg-yellow-400'}"></span>
                 <span class="text-slate-300">${a.title || a.action_type || 'Action'}</span>
                 <span class="text-hive-muted ml-auto">${a.action_date ? fmtDate(a.action_date) : ''}</span>
               </div>`;
@@ -2665,6 +2943,7 @@
     document.getElementById('filterDateFrom').value  = '';
     document.getElementById('filterDateTo').value    = '';
     closeAllFilterMenus();
+    populateStatusFilterMenu();
     populateApiaryFilterMenu();
     populateActionsFilterMenu();
     buildListView();
@@ -3080,218 +3359,6 @@
   document.getElementById('editYardClose').addEventListener('click', closeEditYardModal);
   document.getElementById('editYardModal').addEventListener('click', (e) => {
     if (e.target.id === 'editYardModal') closeEditYardModal();
-  });
-
-  /* ── AI Chat Agent ──────────────────────────────────────────────── */
-  const chatPanel      = document.getElementById('chatPanel');
-  const chatMessages   = document.getElementById('chatMessages');
-  const chatInput      = document.getElementById('chatInput');
-  const chatSetup      = document.getElementById('chatSetup');
-  const chatApiKeyInput= document.getElementById('chatApiKeyInput');
-
-  let _chatOpen = false;
-
-  function getChatApiKey() {
-    return localStorage.getItem('bl_openai_key') ?? '';
-  }
-
-  function buildYardContext() {
-    const yards = [...yardMarkers.values()].map(m => m._yard);
-    if (!yards.length) return 'No yards loaded yet.';
-
-    return yards.map(y => {
-      const kind     = resolveMarkerKind(y);
-      const status   = KIND_META[kind]?.text ?? kind;
-      const actions  = (y.actions ?? []).map(a => {
-        const s = getActionStatus(a);
-        return `    - ${a.action_type ?? a.title ?? 'Action'} on ${a.action_date ?? 'no date'} [${s}]`;
-      }).join('\n') || '    (none)';
-      const signals  = _activeSignalYardIds.has(y.id) ? 'Yes (active signals)' : 'None';
-      const apiary   = y.apiaries?.name ?? 'Unassigned';
-      return `Yard: ${y.name}
-  Apiary: ${apiary}
-  Hives: ${y.hive_count ?? 0}
-  Status: ${status}
-  Lat/Lng: ${y.lat}, ${y.lng}
-  Active Signals: ${signals}
-  Actions:\n${actions}`;
-    }).join('\n\n');
-  }
-
-  function parseChatResponse(text) {
-    // Convert [[YardName]] to clickable map links
-    return text.replace(/\[\[(.+?)\]\]/g, (_, name) => {
-      return `<a href="#" class="chat-yard-link font-semibold text-amber-400 underline hover:text-amber-300 transition" data-yard-name="${name}">${name}</a>`;
-    });
-  }
-
-  function appendMessage(role, html) {
-    const wrap = document.createElement('div');
-    wrap.className = role === 'user'
-      ? 'flex justify-end'
-      : 'flex gap-2.5';
-
-    if (role === 'assistant') {
-      const avatar = document.createElement('div');
-      avatar.className = 'w-6 h-6 rounded-full bg-amber-500/20 border border-amber-500/30 flex items-center justify-center shrink-0 mt-0.5';
-      avatar.innerHTML = '<span class="text-amber-400 text-[10px]">🐝</span>';
-      wrap.appendChild(avatar);
-    }
-
-    const bubble = document.createElement('div');
-    bubble.className = role === 'user'
-      ? 'bg-amber-500/20 border border-amber-600/30 rounded-2xl rounded-tr-sm px-3 py-2 text-xs text-amber-100 max-w-[85%]'
-      : 'bg-slate-800/80 rounded-2xl rounded-tl-sm px-3 py-2 text-xs text-slate-300 max-w-[85%] leading-relaxed';
-    bubble.innerHTML = html;
-    wrap.appendChild(bubble);
-    chatMessages.appendChild(wrap);
-    chatMessages.scrollTop = chatMessages.scrollHeight;
-    return bubble;
-  }
-
-  function appendTyping() {
-    const wrap = document.createElement('div');
-    wrap.className = 'flex gap-2.5';
-    wrap.id = 'chatTyping';
-    wrap.innerHTML = `
-      <div class="w-6 h-6 rounded-full bg-amber-500/20 border border-amber-500/30 flex items-center justify-center shrink-0 mt-0.5">
-        <span class="text-amber-400 text-[10px]">🐝</span>
-      </div>
-      <div class="bg-slate-800/80 rounded-2xl rounded-tl-sm px-3 py-2.5">
-        <span class="flex gap-1">
-          <span class="w-1.5 h-1.5 rounded-full bg-slate-500 animate-bounce" style="animation-delay:0ms"></span>
-          <span class="w-1.5 h-1.5 rounded-full bg-slate-500 animate-bounce" style="animation-delay:150ms"></span>
-          <span class="w-1.5 h-1.5 rounded-full bg-slate-500 animate-bounce" style="animation-delay:300ms"></span>
-        </span>
-      </div>`;
-    chatMessages.appendChild(wrap);
-    chatMessages.scrollTop = chatMessages.scrollHeight;
-  }
-
-  async function sendChatMessage(userText) {
-    const key = getChatApiKey();
-    if (!key) {
-      chatSetup.classList.remove('hidden');
-      chatSetup.querySelector('input').focus();
-      return;
-    }
-
-    appendMessage('user', userText);
-    appendTyping();
-    chatInput.value = '';
-    chatInput.disabled = true;
-
-    const systemPrompt = `You are BeeLinked Assistant, an AI helper for a beehive field management app.
-You have live access to the user's yard data below. Answer questions about yards, apiaries, hives, actions, and signals.
-When referring to a specific yard by name, wrap it like [[Yard Name]] so it becomes a clickable map link.
-Be concise. Use bullet points for lists. Today's date: ${new Date().toLocaleDateString()}.
-
-CURRENT YARD DATA:
-${buildYardContext()}`;
-
-    try {
-      const res = await fetch('https://api.openai.com/v1/chat/completions', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${key}` },
-        body: JSON.stringify({
-          model: 'gpt-4o-mini',
-          messages: [
-            { role: 'system', content: systemPrompt },
-            { role: 'user',   content: userText },
-          ],
-          max_tokens: 500,
-          temperature: 0.4,
-        }),
-      });
-
-      document.getElementById('chatTyping')?.remove();
-
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        const msg = err?.error?.message ?? `API error ${res.status}`;
-        if (res.status === 401) {
-          appendMessage('assistant', '⚠️ Invalid API key. Please update it using the ⚙️ button.');
-          chatSetup.classList.remove('hidden');
-        } else {
-          appendMessage('assistant', `⚠️ ${msg}`);
-        }
-        return;
-      }
-
-      const data = await res.json();
-      const reply = data.choices?.[0]?.message?.content ?? '(no response)';
-      const parsed = parseChatResponse(reply.replace(/\n/g, '<br>'));
-      appendMessage('assistant', parsed);
-
-    } catch (e) {
-      document.getElementById('chatTyping')?.remove();
-      appendMessage('assistant', '⚠️ Network error. Check your connection.');
-    } finally {
-      chatInput.disabled = false;
-      chatInput.focus();
-    }
-  }
-
-  // Open / close
-  document.getElementById('chatAgentBtn').addEventListener('click', () => {
-    _chatOpen = !_chatOpen;
-    chatPanel.classList.toggle('hidden', !_chatOpen);
-    if (_chatOpen) {
-      if (!getChatApiKey()) chatSetup.classList.remove('hidden');
-      chatInput.focus();
-    }
-  });
-
-  document.getElementById('chatClose').addEventListener('click', () => {
-    _chatOpen = false;
-    chatPanel.classList.add('hidden');
-  });
-
-  // Settings toggle
-  document.getElementById('chatSettingsBtn').addEventListener('click', () => {
-    chatSetup.classList.toggle('hidden');
-    if (!chatSetup.classList.contains('hidden')) chatApiKeyInput.focus();
-  });
-
-  // Save API key
-  document.getElementById('chatApiKeySave').addEventListener('click', () => {
-    const key = chatApiKeyInput.value.trim();
-    if (!key) return;
-    localStorage.setItem('bl_openai_key', key);
-    chatApiKeyInput.value = '';
-    chatSetup.classList.add('hidden');
-    appendMessage('assistant', '✅ API key saved! Ask me anything about your yards.');
-  });
-
-  // Send on button click or Enter
-  document.getElementById('chatSendBtn').addEventListener('click', () => {
-    const txt = chatInput.value.trim();
-    if (txt) sendChatMessage(txt);
-  });
-
-  chatInput.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      const txt = chatInput.value.trim();
-      if (txt) sendChatMessage(txt);
-    }
-  });
-
-  // Yard link clicks — navigate map to that yard
-  chatMessages.addEventListener('click', (e) => {
-    const link = e.target.closest('.chat-yard-link');
-    if (!link) return;
-    e.preventDefault();
-    const name = link.dataset.yardName?.toLowerCase();
-    const match = [...yardMarkers.values()].find(m =>
-      (m._yard.name ?? '').toLowerCase() === name
-    );
-    if (match) {
-      _chatOpen = false;
-      chatPanel.classList.add('hidden');
-      map.setView(match.getLatLng(), Math.max(map.getZoom(), 15), { animate: true });
-      setTimeout(() => handleMarkerClick(match._yard), 400);
-    }
   });
 
 })();
