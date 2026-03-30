@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
   <title>BeeLinked — Field Management</title>
-  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🐝</text></svg>" />
+  <link rel="icon" type="image/png" href="logo2.png" />
 
   <!-- Tailwind CSS -->
   <script src="https://cdn.tailwindcss.com"></script>
@@ -52,7 +52,7 @@
       style="padding-top: max(0.75rem, env(safe-area-inset-top)); padding-bottom: 0.75rem;"
     >
       <div class="flex items-center gap-2.5 min-w-0">
-        <img src="logo.png" alt="BeeLinked logo" class="h-9 w-9 rounded-lg object-contain select-none shrink-0" />
+        <img src="logo2.png" alt="BeeLinked logo" class="h-9 w-9 rounded-lg object-contain select-none shrink-0" />
         <div class="min-w-0">
           <h1 class="text-base font-bold tracking-tight text-white leading-tight">BeeLinked</h1>
           <p class="text-[11px] text-hive-muted leading-tight">Field Management</p>
@@ -95,8 +95,8 @@
 
       <!-- Apiary filter bar (floating) -->
       <div id="apiaryFilterBar"
-        class="absolute top-3 left-1/2 z-[900] flex items-center gap-2 px-3 py-2 rounded-2xl border border-slate-700/80 bg-[#0f172a]/90 backdrop-blur-sm shadow-2xl overflow-x-auto scrollbar-hide"
-        style="transform:translateX(-50%); max-width:calc(100vw - 7rem); min-height:2.5rem"
+        class="absolute top-14 sm:top-3 left-1/2 z-[900] flex items-center gap-2 px-3 py-2 rounded-2xl border border-slate-700/80 bg-[#0f172a]/90 backdrop-blur-sm shadow-2xl overflow-x-auto scrollbar-hide"
+        style="transform:translateX(-50%); max-width:calc(100vw - 2rem); min-height:2.5rem"
       >
         <button data-apiary-filter="all"
           class="apiary-filter-btn active shrink-0 px-3 py-1 rounded-full text-xs font-semibold border transition whitespace-nowrap"
@@ -317,15 +317,23 @@
         <p class="text-[10px] text-hive-muted mt-3 pt-3 border-t border-hive-border">Badge number = hive count per yard</p>
       </div>
 
-      <!-- Status bar -->
+      <!-- Status bar + Undo -->
       <div
-        class="absolute left-3 z-[900] max-w-[calc(100%-6rem)]"
-        style="bottom: max(0.75rem, env(safe-area-inset-bottom));"
+        class="absolute left-3 z-[900] flex items-center gap-2"
+        style="bottom: max(0.75rem, env(safe-area-inset-bottom)); max-width: calc(100% - 5rem);"
       >
-        <div class="flex items-center gap-2 rounded-lg border border-hive-border bg-hive-panel/92 px-3 py-1.5">
-          <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 shrink-0 animate-pulse"></span>
-          <span id="statusText" class="text-xs text-slate-400 truncate">Loading yards…</span>
+        <div class="flex items-center gap-2 rounded-lg border border-slate-800 bg-[#080d14]/85 backdrop-blur-sm px-3 py-1.5">
+          <span class="w-1.5 h-1.5 rounded-full bg-emerald-500/70 shrink-0 animate-pulse"></span>
+          <span id="statusText" class="text-xs text-slate-500 truncate">Loading yards…</span>
         </div>
+        <button id="undoBtnStatus" title="Undo last relocation"
+          class="shrink-0 flex items-center justify-center w-7 h-7 rounded-lg border border-slate-800 bg-[#080d14]/85 backdrop-blur-sm text-slate-600 transition hover:text-amber-400 hover:border-amber-800/60 active:scale-95"
+          style="opacity:0.35;pointer-events:none;">
+          <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M9 14L4 9l5-5"/>
+            <path stroke-linecap="round" stroke-linejoin="round" d="M4 9h10a6 6 0 010 12h-1"/>
+          </svg>
+        </button>
       </div>
 
       <!-- ── Map-click transparent overlay (captures all clicks when placing a yard) -->
@@ -448,36 +456,62 @@
       </div>
 
       <!-- Modal body -->
-      <div class="bl-scroll flex-1 overflow-y-auto p-4 space-y-5">
+      <div class="bl-scroll flex-1 overflow-y-auto p-4 space-y-3">
 
-        <!-- Info grid -->
-        <div id="modalInfo" class="grid grid-cols-2 gap-3"></div>
-
-        <!-- Yard Signals section -->
-        <div id="modalSignalsWrap" class="mb-4 rounded-xl bg-slate-900/40 border border-slate-700/40 px-3 py-3"></div>
-
-        <!-- Actions section -->
-        <div id="modalActionsWrap" class="hidden">
-          <div class="flex items-center gap-2 mb-2">
-            <p class="text-[11px] font-semibold uppercase tracking-widest text-hive-muted">Actions</p>
-            <span id="modalActionsCount" class="text-[11px] text-hive-muted"></span>
+        <!-- Section 1: Yard Attributes -->
+        <div class="rounded-xl border border-hive-border bg-hive-card/50 overflow-hidden">
+          <div class="flex items-center gap-2 px-3 py-2 border-b border-hive-border bg-hive-card/60">
+            <svg class="w-3.5 h-3.5 text-amber-400 shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"/>
+            </svg>
+            <span class="text-[11px] font-semibold uppercase tracking-widest text-amber-400/80">Yard Attributes</span>
           </div>
-          <div id="modalActionsList" class="space-y-2"></div>
+          <div id="modalInfo" class="grid grid-cols-2 gap-px bg-hive-border">
+          </div>
         </div>
+
+        <!-- Section 2: Yard Signals -->
+        <div class="rounded-xl border border-hive-border bg-hive-card/50 overflow-hidden">
+          <div class="flex items-center gap-2 px-3 py-2 border-b border-hive-border bg-hive-card/60">
+            <svg class="w-3.5 h-3.5 text-red-400 shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
+            </svg>
+            <span class="text-[11px] font-semibold uppercase tracking-widest text-red-400/80">Yard Signals</span>
+            <span id="modalSignalsCount" class="text-[11px] text-hive-muted flex-1"></span>
+            <button id="modalAddSignalBtn" type="button"
+              class="flex items-center gap-1 rounded-md border border-red-800/60 bg-red-900/30 px-2 py-0.5 text-xs font-semibold text-red-300 hover:bg-red-800/40 hover:text-red-200 active:scale-95 transition">
+              <svg class="w-3 h-3" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/>
+              </svg>
+              Add
+            </button>
+          </div>
+          <div id="modalSignalsWrap" class="px-3 py-3"></div>
+        </div>
+
+        <!-- Section 3: Actions -->
+        <div id="modalActionsWrap" class="rounded-xl border border-hive-border bg-hive-card/50 overflow-hidden">
+          <div class="flex items-center gap-2 px-3 py-2 border-b border-hive-border bg-hive-card/60">
+            <svg class="w-3.5 h-3.5 text-emerald-400 shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"/>
+            </svg>
+            <span class="text-[11px] font-semibold uppercase tracking-widest text-emerald-400/80">Actions</span>
+            <span id="modalActionsCount" class="text-[11px] text-hive-muted flex-1"></span>
+            <button id="modalAddActionBtn" type="button"
+              class="flex items-center gap-1 rounded-md border border-emerald-700/60 bg-emerald-900/30 px-2 py-0.5 text-xs font-semibold text-emerald-300 hover:bg-emerald-800/40 hover:text-emerald-200 active:scale-95 transition">
+              <svg class="w-3 h-3" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/>
+              </svg>
+              Add
+            </button>
+          </div>
+          <div id="modalActionsList" class="divide-y divide-hive-border"></div>
+        </div>
+
       </div>
 
       <!-- Modal footer -->
-      <div class="shrink-0 flex items-center gap-2 px-4 py-3 border-t border-hive-border bg-hive-bg/60">
-        <p class="text-[11px] text-hive-muted flex-1 min-w-0 truncate">
-          Opens yard · updates <code class="text-emerald-400">last_seen_at</code>
-        </p>
-        <button id="modalAddActionBtn" type="button"
-          class="shrink-0 flex items-center gap-1.5 rounded-lg border border-emerald-700/60 bg-emerald-900/30 px-3 py-1.5 text-xs font-semibold text-emerald-300 hover:bg-emerald-800/40 hover:text-emerald-200 active:scale-95 transition">
-          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/>
-          </svg>
-          Add Action
-        </button>
+      <div class="shrink-0 flex items-center justify-end gap-2 px-4 py-3 border-t border-hive-border bg-hive-bg/60">
         <button id="modalShareBtn" type="button"
           class="shrink-0 flex items-center gap-1.5 rounded-lg border border-hive-border bg-hive-card px-3 py-1.5 text-xs font-semibold text-slate-200 hover:bg-hive-panel hover:text-white active:scale-95 transition">
           <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">

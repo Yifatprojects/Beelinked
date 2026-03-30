@@ -18,18 +18,23 @@ body { font-family: ui-sans-serif, system-ui, -apple-system, sans-serif; backgro
 
 /* Leaflet zoom control dark theme */
 .leaflet-bar a {
-  background: #1a2332 !important;
-  border-color: #2d3a4d !important;
-  color: #e2e8f0 !important;
+  background: #0c1420 !important;
+  border-color: #1e2d40 !important;
+  color: #94a3b8 !important;
 }
 .leaflet-bar a:hover {
-  background: #243044 !important;
+  background: #162030 !important;
+  color: #e2e8f0 !important;
 }
 
-/* Attribution override */
-/* Push zoom controls below the List View button */
+/* Move left controls to vertical center of the map */
+.leaflet-top.leaflet-left {
+  top: 50% !important;
+  transform: translateY(-50%);
+}
+
 .leaflet-top.leaflet-left .leaflet-control-zoom {
-  margin-top: 3.75rem;
+  margin-top: 0;
 }
 
 .leaflet-control-attribution {

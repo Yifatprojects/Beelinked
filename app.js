@@ -43,6 +43,11 @@
   /** Set of yard IDs that have at least one active (unresolved) signal */
   const _activeSignalYardIds = new Set();
 
+  /* ── Drag / undo state ────────────────────────────────────────────── */
+  let _justDragged  = false;
+  let _lastRelocate = null;
+  let _undoBtn      = null;
+
   /* ── Current-location layer ───────────────────────────────────────── */
   let _locMarker   = null;
   let _locCircle   = null;
@@ -114,7 +119,7 @@
       btn.style.cssText = `
         display:flex;align-items:center;justify-content:center;
         width:36px;height:36px;border-radius:8px;cursor:pointer;
-        background:#1e293b;border:2px solid #334155;color:#3b82f6;
+        background:#0c1420;border:2px solid #1e2d40;color:#3b82f6;
         box-shadow:0 2px 8px rgba(0,0,0,0.5);transition:background 0.2s;
         margin-top:4px;
       `;
@@ -167,6 +172,36 @@
     },
   });
   new LocateControl().addTo(map);
+
+  // Wire the status-bar undo button
+  _undoBtn = document.getElementById('undoBtnStatus');
+
+  function setUndoActive(active) {
+    if (!_undoBtn) return;
+    if (active) {
+      _undoBtn.style.opacity = '1';
+      _undoBtn.style.pointerEvents = 'auto';
+      _undoBtn.style.color = '#f59e0b';
+      _undoBtn.style.borderColor = 'rgba(217,119,6,0.5)';
+    } else {
+      _undoBtn.style.opacity = '0.35';
+      _undoBtn.style.pointerEvents = 'none';
+      _undoBtn.style.color = '#475569';
+      _undoBtn.style.borderColor = '';
+    }
+  }
+
+  _undoBtn.addEventListener('click', async () => {
+    if (!_lastRelocate) return;
+    const { yardId, lat, lng } = _lastRelocate;
+    const m = yardMarkers.get(yardId);
+    if (!m) return;
+    _lastRelocate = null;
+    setUndoActive(false);
+    await saveRelocate(m._yard, lat, lng, { silent: true });
+    m.setLatLng([lat, lng]);
+    setStatus('Relocation undone');
+  });
 
   // Start passive tracking immediately
   startLocationTracking();
@@ -600,7 +635,7 @@
      MARKER MANAGEMENT
      ══════════════════════════════════════════════════════════════════ */
 
-  let _justDragged = false; // suppress click that fires right after dragend
+  // _justDragged, _lastRelocate, _undoBtn declared at top of scope
 
   function attachClick(marker) {
     marker.off('click');
@@ -662,6 +697,10 @@
 
       const { lat, lng } = e.target.getLatLng();
       const yardSnapshot = marker._yard; // capture before async
+
+      // Store previous position for undo
+      _lastRelocate = { yardId: yardSnapshot.id, lat: yardSnapshot.lat, lng: yardSnapshot.lng };
+      setUndoActive(true);
 
       const ok = await saveRelocate(yardSnapshot, lat, lng, { silent: true });
 
@@ -766,12 +805,12 @@
 
   function makeInfoRow(label, value) {
     const wrap = document.createElement('div');
-    wrap.className = 'flex flex-col gap-0.5';
+    wrap.className = 'flex flex-col gap-0.5 bg-hive-card px-3 py-2.5';
     const lbl = document.createElement('span');
-    lbl.className = 'text-[11px] uppercase tracking-widest text-slate-500 font-medium';
+    lbl.className = 'text-[10px] uppercase tracking-widest text-slate-500 font-semibold';
     lbl.textContent = label;
     const val = document.createElement('span');
-    val.className = 'text-slate-100 text-sm';
+    val.className = 'text-slate-100 text-sm font-medium';
     val.textContent = String(value);
     wrap.append(lbl, val);
     return wrap;
@@ -779,10 +818,10 @@
 
   function makeHiveCountRow(yard) {
     const wrap = document.createElement('div');
-    wrap.className = 'flex flex-col gap-0.5';
+    wrap.className = 'flex flex-col gap-0.5 bg-hive-card px-3 py-2.5';
 
     const lbl = document.createElement('span');
-    lbl.className = 'text-[11px] uppercase tracking-widest text-slate-500 font-medium';
+    lbl.className = 'text-[10px] uppercase tracking-widest text-slate-500 font-semibold';
     lbl.textContent = 'Hives';
 
     const controls = document.createElement('div');
@@ -857,12 +896,12 @@
     const dt      = action.action_date ? new Date(action.action_date) : null;
 
     const item = document.createElement('div');
-    item.className = `rounded-lg px-3 py-2.5 text-sm transition-all duration-200 ${
-      status === 'done' ? 'bg-slate-800/30 opacity-60' : 'bg-slate-800/60'
-    } ${style.itemCls}`;
+    item.className = `px-3 py-2.5 text-sm transition-all duration-200 bg-hive-card ${
+      status === 'done' ? 'opacity-55' : ''
+    }`;
 
     const header = document.createElement('div');
-    header.className = 'flex items-center gap-2 mb-1';
+    header.className = 'flex items-center gap-2';
 
     const title = document.createElement('span');
     title.className = `font-medium truncate flex-1 min-w-0 ${status === 'done' ? 'line-through text-slate-400' : 'text-slate-100'}`;
@@ -961,18 +1000,25 @@
     controls.append(pill, doneBtn, delBtn);
     header.append(title, controls);
 
-    const date = document.createElement('p');
+    const subRow = document.createElement('div');
+    subRow.className = 'flex items-center gap-2 mt-1';
+
+    const date = document.createElement('span');
     date.className = 'text-xs text-slate-400';
     date.textContent = dt ? fmtDate(action.action_date) : 'No date';
-
-    item.append(header, date);
+    subRow.append(date);
 
     if (action.notes) {
-      const notes = document.createElement('p');
-      notes.className = 'text-xs text-slate-400 mt-1 line-clamp-2';
+      const sep = document.createElement('span');
+      sep.className = 'text-slate-600 text-xs';
+      sep.textContent = '·';
+      const notes = document.createElement('span');
+      notes.className = 'text-xs text-slate-400 truncate';
       notes.textContent = action.notes;
-      item.append(notes);
+      subRow.append(sep, notes);
     }
+
+    item.append(header, subRow);
 
     return item;
   }
@@ -981,10 +1027,10 @@
 
   function makeCoordRow(yard) {
     const wrap = document.createElement('div');
-    wrap.className = 'flex flex-col gap-0.5';
+    wrap.className = 'flex flex-col gap-0.5 bg-hive-card px-3 py-2.5';
 
     const lbl = document.createElement('span');
-    lbl.className = 'text-[11px] uppercase tracking-widest text-slate-500 font-medium';
+    lbl.className = 'text-[10px] uppercase tracking-widest text-slate-500 font-semibold';
     lbl.textContent = 'Coordinates';
 
     const valRow = document.createElement('div');
@@ -1067,8 +1113,9 @@
     const meta = KIND_META[kind] ?? KIND_META.default;
 
     // Header
+    const apiaryName = yard.apiaries?.name ?? null;
     document.getElementById('modalTitle').textContent    = yard.name ?? 'Yard';
-    document.getElementById('modalSubtitle').textContent = yard.location ?? '';
+    document.getElementById('modalSubtitle').textContent = apiaryName ?? yard.location ?? '';
 
     const badge = document.getElementById('modalBadge');
     badge.className   = `inline-flex items-center text-xs font-semibold px-2.5 py-1 rounded-full ${meta.css}`;
@@ -1077,15 +1124,15 @@
     // Info grid
     const grid = document.getElementById('modalInfo');
     grid.innerHTML = '';
-    const apiaryName = yard.apiaries?.name ?? null;
     grid.append(
       makeHiveCountRow(yard),
-      makeInfoRow('Last Seen', fmt(yard.last_seen_at)),
-      makeInfoRow('Status',    meta.text),
       makeCoordRow(yard),
     );
-    if (apiaryName) grid.append(makeInfoRow('Apiary', apiaryName));
-    if (yard.notes) grid.append(makeInfoRow('Notes',  yard.notes));
+    if (yard.notes) {
+      const notesRow = makeInfoRow('Notes', yard.notes);
+      notesRow.classList.add('col-span-2');
+      grid.append(notesRow);
+    }
 
     // Actions list
     const actionsWrap = document.getElementById('modalActionsWrap');
@@ -1093,10 +1140,8 @@
     actionsList.innerHTML = '';
 
     const actions = Array.isArray(yard.actions) ? yard.actions : [];
-    if (actions.length === 0) {
-      actionsWrap.classList.add('hidden');
-    } else {
-      actionsWrap.classList.remove('hidden');
+    actionsWrap.classList.remove('hidden');
+    if (actions.length > 0) {
       const countBadge = document.getElementById('modalActionsCount');
       let remaining = actions.length;
       countBadge.textContent = `(${remaining})`;
@@ -1115,10 +1160,10 @@
       const onDeleted = (deletedId, isDoneOnly = false) => {
         if (!isDoneOnly) {
           remaining -= 1;
-          if (remaining <= 0) {
-            actionsWrap.classList.add('hidden');
-          } else {
+          if (remaining > 0) {
             countBadge.textContent = `(${remaining})`;
+          } else {
+            countBadge.textContent = '';
           }
         }
         // Keep marker colour in sync
@@ -1192,19 +1237,14 @@
     wrap.innerHTML = '';
     const signals = (rawSignals ?? []).filter(s => s.is_active);
 
-    // ── Section header ──────────────────────────────────────────────
-    const header = document.createElement('div');
-    header.className = 'flex items-center justify-between mb-2';
-    header.innerHTML = `
-      <span class="text-[11px] uppercase tracking-widest text-slate-500 font-medium flex items-center gap-1.5">
-        <svg class="w-3 h-3 text-red-400" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z"/>
-        </svg>
-        Yard Signals
-        ${signals.length ? `<span class="ml-1 px-1.5 py-0.5 rounded-full bg-red-900/50 text-red-300 text-[10px] font-bold">${signals.length}</span>` : ''}
-      </span>
-    `;
-    wrap.appendChild(header);
+    // Update count badge in static header
+    const countEl = document.getElementById('modalSignalsCount');
+    if (countEl) countEl.textContent = signals.length ? `(${signals.length})` : '';
+
+    // Wire static Add button
+    const addBtn = document.getElementById('modalAddSignalBtn');
+    if (addBtn) addBtn.replaceWith(addBtn.cloneNode(true)); // remove old listeners
+    const freshAddBtn = document.getElementById('modalAddSignalBtn');
 
     // ── Existing signals list ───────────────────────────────────────
     if (signals.length) {
@@ -1239,10 +1279,6 @@
     }
 
     // ── Add new signal form ─────────────────────────────────────────
-    const addBtn = document.createElement('button');
-    addBtn.type = 'button';
-    addBtn.className = 'w-full flex items-center justify-center gap-1.5 rounded-lg border border-dashed border-slate-600 text-xs text-slate-500 hover:border-red-600 hover:text-red-400 py-2 transition';
-    addBtn.innerHTML = `<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/></svg> Add Signal`;
 
     const addForm = document.createElement('div');
     addForm.className = 'hidden mt-2 flex flex-col gap-2';
@@ -1273,14 +1309,16 @@
     saveRow.append(saveBtn, cancelBtn);
     addForm.append(select, noteIn, saveRow);
 
-    addBtn.addEventListener('click', () => {
-      addBtn.classList.add('hidden');
-      addForm.classList.remove('hidden');
-      select.focus();
-    });
+    if (freshAddBtn) {
+      freshAddBtn.addEventListener('click', () => {
+        freshAddBtn.classList.add('hidden');
+        addForm.classList.remove('hidden');
+        select.focus();
+      });
+    }
     cancelBtn.addEventListener('click', () => {
       addForm.classList.add('hidden');
-      addBtn.classList.remove('hidden');
+      if (freshAddBtn) freshAddBtn.classList.remove('hidden');
     });
 
     saveBtn.addEventListener('click', async () => {
@@ -1307,7 +1345,7 @@
       await refreshYardSignals(yard.id);
     });
 
-    wrap.append(addBtn, addForm);
+    wrap.append(addForm);
   }
 
   // ── Delete (resolve) button delegation — set up ONCE globally ──────
@@ -1793,6 +1831,8 @@
     const relocY   = _pendingRelocateYard;
     exitMapClickMode();
     if (mode === 'relocate') {
+      _lastRelocate = { yardId: relocY.id, lat: relocY.lat, lng: relocY.lng };
+      setUndoActive(true);
       saveRelocate(relocY, latlng.lat, latlng.lng);
     } else {
       saveNewYard(name, count, apiaryId, latlng.lat, latlng.lng);
