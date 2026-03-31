@@ -1140,10 +1140,39 @@
 
     const btn = document.createElement('button');
     btn.type = 'button';
-    btn.dataset.tip = 'Relocate this yard on the map';
+    btn.dataset.tip = 'Set yard location to my current location';
     btn.className = 'shrink-0 flex items-center justify-center text-amber-400 hover:text-amber-300 w-7 h-7 rounded-md hover:bg-amber-900/30 active:scale-95 transition';
-    btn.innerHTML = `<svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/><path stroke-linecap="round" stroke-linejoin="round" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"/></svg>`;
-    btn.addEventListener('click', () => startRelocate(yard));
+    btn.innerHTML = `<svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path stroke-linecap="round" stroke-linejoin="round" d="M12 2v3m0 14v3M2 12h3m14 0h3"/><circle cx="12" cy="12" r="7" stroke-dasharray="2 2"/></svg>`;
+    btn.addEventListener('click', () => {
+      if (!navigator.geolocation) {
+        setStatus('Geolocation not supported by this browser', true);
+        return;
+      }
+      // Spinner while waiting for GPS
+      btn.disabled = true;
+      btn.innerHTML = `<svg class="w-4 h-4 animate-spin" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 3v3m0 12v3M3 12h3m12 0h3"/></svg>`;
+      setStatus('Getting your location…');
+
+      navigator.geolocation.getCurrentPosition(
+        async (pos) => {
+          btn.disabled = false;
+          btn.innerHTML = `<svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path stroke-linecap="round" stroke-linejoin="round" d="M12 2v3m0 14v3M2 12h3m14 0h3"/><circle cx="12" cy="12" r="7" stroke-dasharray="2 2"/></svg>`;
+          const newLat = pos.coords.latitude;
+          const newLng = pos.coords.longitude;
+          await saveRelocate(yard, newLat, newLng);
+          // Refresh the coordinate display in the open modal
+          val.textContent = `${Number(newLat).toFixed(6)}, ${Number(newLng).toFixed(6)}`;
+          yard.lat = newLat;
+          yard.lng = newLng;
+        },
+        (err) => {
+          btn.disabled = false;
+          btn.innerHTML = `<svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path stroke-linecap="round" stroke-linejoin="round" d="M12 2v3m0 14v3M2 12h3m14 0h3"/><circle cx="12" cy="12" r="7" stroke-dasharray="2 2"/></svg>`;
+          setStatus('Location access denied – check browser permissions', true);
+        },
+        { enableHighAccuracy: false, timeout: 5000, maximumAge: 30000 }
+      );
+    });
 
     // Navigate button
     const navBtn = document.createElement('button');
@@ -1165,31 +1194,60 @@
       picker.className = 'absolute z-[9999] bg-[#1e293b] border border-slate-700 rounded-xl shadow-2xl p-2 flex flex-col gap-1 text-sm';
       picker.style.cssText = 'min-width:160px';
 
+      // Google Maps — red pin with "G" colours
+      const ICON_GMAPS = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style="flex-shrink:0">
+        <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z" fill="#EA4335"/>
+        <circle cx="12" cy="9" r="2.5" fill="#fff"/>
+      </svg>`;
+
+      // Waze — recognisable teal ghost body + eyes
+      const ICON_WAZE = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style="flex-shrink:0">
+        <path d="M12 3C7.58 3 4 6.36 4 10.5c0 2.7 1.4 5.08 3.54 6.52L7 20l3-1.5c.63.16 1.3.25 2 .25 4.42 0 8-3.36 8-7.5S16.42 3 12 3z" fill="#33CCFF"/>
+        <circle cx="9.5" cy="11" r="1.2" fill="#1a1a2e"/>
+        <circle cx="14.5" cy="11" r="1.2" fill="#1a1a2e"/>
+        <path d="M9.5 14.5 Q12 16.5 14.5 14.5" stroke="#1a1a2e" stroke-width="1.2" stroke-linecap="round" fill="none"/>
+        <circle cx="17.5" cy="6.5" r="2" fill="#FFCC00"/>
+        <circle cx="16.8" cy="6.2" r="0.5" fill="#1a1a2e"/>
+        <circle cx="18.2" cy="6.2" r="0.5" fill="#1a1a2e"/>
+      </svg>`;
+
       const makePick = (label, icon, url) => {
         const a = document.createElement('a');
         a.href = url;
         a.target = '_blank';
         a.rel = 'noopener noreferrer';
-        a.className = 'flex items-center gap-2 px-3 py-2 rounded-lg text-slate-200 hover:bg-slate-700 transition cursor-pointer font-medium';
-        a.innerHTML = `${icon} ${label}`;
+        a.className = 'flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-slate-200 hover:bg-slate-700/70 transition cursor-pointer font-medium text-sm';
+        a.innerHTML = `${icon}<span>${label}</span>`;
         a.addEventListener('click', () => picker.remove());
         return a;
       };
 
       picker.append(
-        makePick('Google Maps', '🗺️', `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}`),
-        makePick('Waze',        '🚗', `https://waze.com/ul?ll=${lat},${lng}&navigate=yes`),
+        makePick('Google Maps', ICON_GMAPS, `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}`),
+        makePick('Waze',        ICON_WAZE,  `https://waze.com/ul?ll=${lat},${lng}&navigate=yes`),
       );
 
-      // Position near the button
-      const rect = navBtn.getBoundingClientRect();
-      picker.style.top  = `${rect.bottom + window.scrollY + 4}px`;
-      picker.style.left = `${rect.left   + window.scrollX}px`;
-      picker.style.position = 'fixed';
-      picker.style.top  = `${rect.bottom + 4}px`;
-      picker.style.left = `${rect.left}px`;
-
+      // Smart positioning — stays within viewport on mobile
       document.body.appendChild(picker);
+      const rect    = navBtn.getBoundingClientRect();
+      const pWidth  = picker.offsetWidth  || 172;
+      const pHeight = picker.offsetHeight || 96;
+      const vw      = window.innerWidth;
+      const vh      = window.innerHeight;
+      const margin  = 8;
+
+      let top  = rect.bottom + 6;
+      let left = rect.left;
+
+      // Flip above button if not enough space below
+      if (top + pHeight + margin > vh) top = rect.top - pHeight - 6;
+      // Clamp horizontal so it never goes off-screen
+      if (left + pWidth + margin > vw) left = vw - pWidth - margin;
+      if (left < margin) left = margin;
+
+      picker.style.position = 'fixed';
+      picker.style.top  = `${top}px`;
+      picker.style.left = `${left}px`;
 
       // Close on outside click
       setTimeout(() => {
